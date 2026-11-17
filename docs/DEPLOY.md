@@ -36,6 +36,18 @@ Limits to know: Vercel Hobby is for non-commercial use (fine for an academic pil
 function instance, so the per-IP limits are weaker than on one server, while the 5-failure account lock (FR-1.7) is stored
 in the database and unaffected.
 
+### Status of the live setup (2026-11-17)
+
+| Item | State |
+|---|---|
+| GitHub | `sajjadbadshah708-design/athleteverse` (public); Vercel and Render GitHub apps installed for this repository only |
+| Neon | project `athleteverse`, AWS Asia Pacific (Singapore), PostgreSQL 17, database `athleteverse` |
+| Vercel | project `athleteverse`, root `apps/web`, Node.js 22.x, domain `https://athleteverse.vercel.app` |
+| Vercel variables (Production) | `NODE_ENV`, `PLATFORM_TZ`, `TRUST_PROXY_HOPS=1`, `MAIL_PROVIDER=console`, `WEB_BASE_URL`, `DATABASE_URL`, `DIRECT_URL`, `JOB_SECRET`, `JWT_SECRET`, `OTP_PEPPER` (secrets generated locally onto the clipboard, never displayed) |
+| GitHub Actions secrets | `API_URL`, `JOB_SECRET` (same value as in Vercel) |
+| Render | not used: it requires a payment card; the half-filled form was abandoned, nothing created |
+| Still to do | first production deployment, owner seed, live checks, a mail provider instead of `console` before real users |
+
 ## 0. Findings that shaped this task (checked October 2026)
 
 | # | Finding | Consequence in the code |
