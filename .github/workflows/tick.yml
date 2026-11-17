@@ -1,0 +1,32 @@
+# Calls the API's job runner every 10 minutes (SRS 3.4). It also keeps the free Render service from sleeping.
+# Repository secrets needed: API_URL (e.g. https://athleteverse-api.onrender.com, no trailing slash) and JOB_SECRET.
+# GitHub runs scheduled workflows on a best-effort basis (they can start late) and pauses them on a public repository
+# after 60 days without activity; re-enable them in the Actions tab if that happens.
+name: tick
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call the job runner
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          JOB_SECRET: ${{ secrets.JOB_SECRET }}
+        run: |
+          set -euo pipefail
+          : "${API_URL:?Add the API_URL repository secret}"
+          : "${JOB_SECRET:?Add the JOB_SECRET repository secret}"
+          # A sleeping free service needs up to about a minute to wake, so allow a long first response and retry once.
+          response=$(curl --silent --show-error --fail-with-body --max-time 150 --retry 1 --retry-delay 20 \
+            -X POST -H "X-Job-Secret: ${JOB_SECRET}" "${API_URL}/api/jobs/tick")
+          echo "${response}"
+          echo "${response}" | jq -e '.ok == true' > /dev/null

@@ -1,0 +1,129 @@
+Requirement ID,MVP document wording,SRS priority,MVP planned scope,MVP stated reason/deferral,Current verification state
+FR-1.1,Register Player/Manager; Terms and 16+ declaration,Must,Yes†,Web only; app registration Later,Not verified on PostgreSQL/real browser
+FR-1.2,Reject e-mail or phone already in use,Must,Yes,Blocks credit-score evasion,Not verified on PostgreSQL/real browser
+FR-1.3,6-digit e-mail OTP before activation,Must,Yes,Activation gate; OTP logged in dev,Not verified on PostgreSQL/real browser
+FR-1.4,Password rule; bcrypt/Argon2 hash only,Must,Yes,Baseline security,Not verified on PostgreSQL/real browser
+FR-1.5,Verified Manager Pending Approval; no venue before approval,Must,Yes†,Resubmission after rejection Later,Not verified on PostgreSQL/real browser
+FR-1.6,Staff by manager invitation; Super Admin by seed,Must,Yes†,Owner seed only; more admins Later,Not verified on PostgreSQL/real browser
+FR-1.7,Login; lock 15 minutes after 5 failures,Must,Yes,Cheap brute-force protection,Not verified on PostgreSQL/real browser
+FR-1.8,15-min access token; refresh token (web cookie/app),Must,Yes†,Cookies now; bearer tokens with app,Not verified on PostgreSQL/real browser
+FR-1.9,Extra e-mail OTP for Super Admin login,Should,Yes,SA-3 mandates it (K1),Not verified on PostgreSQL/real browser
+FR-1.10,Password reset by single-use link,Must,Later,Not on core flow,Not verified on PostgreSQL/real browser
+FR-1.11,"One role per account, verified every request",Must,Yes,Integrity rule,Not verified on PostgreSQL/real browser
+FR-1.12,Access Denied response and logged attempt,Must,Yes,Needed for permission tests,Not verified on PostgreSQL/real browser
+FR-1.13,Managers/staff limited to own/assigned venues,Must,Yes,Ownership check on every query,Not verified on PostgreSQL/real browser
+FR-1.14,"Player profile: sports, positions, levels, availability",Must,Yes†,Basic fields now; sports with Teams,Not verified on PostgreSQL/real browser
+FR-1.15,Block booking/team/tournament until profile complete,Must,Yes†,Narrowed gate (M2),Not verified on PostgreSQL/real browser
+FR-1.16,Phone visibility rule; hide e-mail and birth date,Must,Yes†,Venue-side only; team rules Later,Not verified on PostgreSQL/real browser
+FR-1.17,Player can switch off discoverability,Should,Later,Only matters for team search,Not verified on PostgreSQL/real browser
+FR-1.18,"Limits: 3 venues, 10 courts, 5 staff",Must,Yes,Cheap constraints,Not verified on PostgreSQL/real browser
+FR-1.19,OTP re-verification on e-mail change,Should,Later,No e-mail change in MVP,Not verified on PostgreSQL/real browser
+FR-1.20,Super Admin search/approve/reject/suspend/delete accounts,Must,Yes†,"Approve/reject only; suspend, delete Later",Not verified on PostgreSQL/real browser
+FR-1.21,Notify account status changes; suspension notice,Must,Later,Needs notifications and suspension,Not verified on PostgreSQL/real browser
+FR-1.22,Protect owner account; keep one active admin,Must,Later,No suspend/edit endpoints yet,Not verified on PostgreSQL/real browser
+FR-1.23,"Mandatory reason, audited, for sensitive actions",Must,Yes†,"Approvals, rejections, cancellations now",Not verified on PostgreSQL/real browser
+FR-1.24,"Session records, device list, sign-out, 5-session cap",Must,Yes†,Sessions and revoke; device UI Later,Not verified on PostgreSQL/real browser
+FR-1.25,App biometric/passcode lock,Could,No,Convenience; app not in MVP,Not verified on PostgreSQL/real browser
+FR-2.1,List Active venues in list and map views,Must,Yes†,List now; map Later,Not verified on PostgreSQL/real browser
+FR-2.2,"Search, filter and sort venues",Must,Yes†,"Name, sport, city filters only",Not verified on PostgreSQL/real browser
+FR-2.3,"Venue page: photos, map, courts, prices, reviews",Must,Yes†,"Courts, prices, hours, policy only",Not verified on PostgreSQL/real browser
+FR-2.4,"Device location, else choose city",Should,Later,City filter suffices,Not verified on PostgreSQL/real browser
+FR-2.5,Slot states with text labels,Must,Yes,Core booking UI,Not verified on PostgreSQL/real browser
+FR-2.6,15-second availability refresh,Should,Later,Server re-check covers staleness,Not verified on PostgreSQL/real browser
+FR-2.7,"Book 1–3 consecutive slots, 14 days ahead",Must,Yes,Core flow,Not verified on PostgreSQL/real browser
+FR-2.8,"Instant confirmation, unique 8-character code",Must,Yes,Core flow,Not verified on PostgreSQL/real browser
+FR-2.9,At most one active booking/block per court-time,Must,Yes,Integrity rule 5,Not verified on PostgreSQL/real browser
+FR-2.10,Store price at booking time,Must,Yes,Price snapshot,Not verified on PostgreSQL/real browser
+FR-2.11,Tier-based booking limit; no overlapping bookings,Must,Yes,Credit loop depends on it,Not verified on PostgreSQL/real browser
+FR-2.12,"Notify player (in-app, e-mail) and manager",Must,Later,Code shown on screen instead,Not verified on PostgreSQL/real browser
+FR-2.13,My Bookings with Upcoming/Past/Cancelled tabs,Must,Yes,Player cancel entry point,Not verified on PostgreSQL/real browser
+FR-2.14,Reminder 2 hours before start,Could,No,Needs notifications and push,Not verified on PostgreSQL/real browser
+FR-2.15,No online payment; cash after match,Must,Yes,Defines payment model; mostly UI copy,Not verified on PostgreSQL/real browser
+FR-2.16,"Staff/manager record Paid, Unpaid or NoShow",Must,Yes,Core flow,Not verified on PostgreSQL/real browser
+FR-2.17,"Paid sets Completed, +5 credit, receipt",Must,Yes,Recovery rule,Not verified on PostgreSQL/real browser
+FR-2.18,Auto-close unrecorded bookings after 24 hours,Must,Yes,Needs tick endpoint; no penalty,Not verified on PostgreSQL/real browser
+FR-2.19,Manager corrects outcome within 7 days,Should,Later,Needs reversal logic; after core,Not verified on PostgreSQL/real browser
+FR-2.20,Player cancels; rule and points shown first,Must,Yes,Core credit flow,Not verified on PostgreSQL/real browser
+FR-2.21,Apply Table 16 windows on server time,Must,Yes,Core credit flow,Not verified on PostgreSQL/real browser
+FR-2.22,"Manager cancels with reason, no penalty",Must,Yes†,Player notification Later,Not verified on PostgreSQL/real browser
+FR-2.23,No-show only 15 minutes after start,Must,Yes,Fairness guard,Not verified on PostgreSQL/real browser
+FR-2.24,"Credit events once, same transaction, 0–100",Must,Yes,Integrity rule 5,Not verified on PostgreSQL/real browser
+FR-2.25,"Tiers: booking limits, entry ban, blocking",Must,Yes†,Tournament ban Later,Not verified on PostgreSQL/real browser
+FR-2.26,Penalty dispute process with point reversal,Must,Later,Fairness gap; see Q1,Not verified on PostgreSQL/real browser
+FR-2.27,"Show score, tier, history; manager tier badge",Must,Yes,Makes credit loop visible,Not verified on PostgreSQL/real browser
+FR-2.28,Restore blocked account after 30 days,Should,Yes†,Avoids dead end; admin restore Later,Not verified on PostgreSQL/real browser
+FR-2.29,"Staff walk-in booking, no credit effect",Should,Later,Not on core flow,Not verified on PostgreSQL/real browser
+FR-2.30,Rate and review after completed booking,Should,Later,Not on core flow,Not verified on PostgreSQL/real browser
+FR-2.31,Super Admin removes abusive reviews,Should,Later,Depends on reviews,Not verified on PostgreSQL/real browser
+FR-3.1,Create team; creator becomes Captain,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.2,One team per sport per player (DB constraint),Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.3,Captain and Member roles with permissions,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.4,Roster limits; match-ready at minimum,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.5,Leave/remove rules protecting matches and registrations,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.6,Captain transfers captaincy immediately,Should,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.7,Disband unless match or registration active,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.8,Recruiting and Open-to-challenges flags,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.9,"Team page: roster, record, matches, honours",Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.10,Captain invites player; 7-day acceptance,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.11,Player join request to Recruiting team,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.12,Limit 20 invitations/challenges per team daily,Should,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.13,Search players ranked by shared availability,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.14,Search teams by city and challenge status,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.15,Challenge only from Captain with Confirmed booking,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.16,One challenge per booking; same sport,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.17,Accept/decline window; otherwise challenge expires,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.18,Reveal Captains’ phones on acceptance,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.19,Cancel match if booking is cancelled,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.20,Withdraw challenge; challenge another team,Should,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.21,Captain enters score within 48 hours,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.22,Opponent Agree/Disagree; silence agrees; Void,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.23,Records update from agreed matches only,Must,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-3.24,Notify captains and members of match events,Should,Later,Sprint 4: teams,Not verified on PostgreSQL/real browser
+FR-4.1,Manager creates tournament with full parameters,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.2,Single Elimination and Round Robin formats,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.3,Validate date order and 14-day maximum,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.4,Draft private until published,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.5,Restrict edits once registrations exist,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.6,Browse and filter tournaments,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.7,"Tournament page: teams, bracket, schedule, results",Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.8,Captain registers eligible team; failures explained,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.9,Capacity counted in locking transaction,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.10,Zero fee confirms; paid enters Pending Payment,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.11,Manager/staff mark cash received,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.12,Expire unpaid registrations; release spot,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.13,Captain withdraws before deadline; refund due,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.14,Manager removes or disqualifies team,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.15,Cancel tournament; refunds due; blocks released,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.16,Close registration; minimum four confirmed teams,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.17,Generate elimination or round-robin fixtures,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.18,Regenerate fixtures until published,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.19,Assign court/time; reject clashes; create blocks,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.20,Auto-schedule on earliest free slots,Could,No,Manual scheduling suffices,Not verified on PostgreSQL/real browser
+FR-4.21,Move or postpone matches with reason,Should,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.22,Manager/staff enter results; winners advance,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.23,Round-robin standings with tie-breaks,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.24,Record forfeit; 3-0; Captain penalty,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.25,Correct results until dependents are played,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.26,Complete tournament; store final positions,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.27,Notify teams of tournament events,Should,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.28,15-second refresh of brackets and standings,Should,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.29,Managers own tournaments; Super Admin can cancel,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-4.30,Block roster changes below minimum in tournament,Must,Later,Sprint 5: tournaments,Not verified on PostgreSQL/real browser
+FR-5.1,Manager home dashboard (Table 25 items),Must,Yes†,Today’s bookings and open actions only,Not verified on PostgreSQL/real browser
+FR-5.2,"Day/week calendar per court, 15s refresh",Must,Later,List view suffices for MVP,Not verified on PostgreSQL/real browser
+FR-5.3,"Booking list, search by code/name/phone, detail",Must,Yes†,Status history derived from audit log,Not verified on PostgreSQL/real browser
+FR-5.4,Block/unblock slots or courts with reason,Must,Later,Court status Maintenance interim,Not verified on PostgreSQL/real browser
+FR-5.5,"Cash report for date range, CSV",Should,Later,Reporting after core flow,Not verified on PostgreSQL/real browser
+FR-5.6,Manager invites/disables/removes staff; activity log,Must,Yes†,"Invite/disable now; remove, log Later",Not verified on PostgreSQL/real browser
+FR-5.7,Dispute inbox for managers,Must,Later,Ships with disputes,Not verified on PostgreSQL/real browser
+FR-5.8,Venue/court/price set-up with preview,Must,Yes†,Forms now; preview Later,Not verified on PostgreSQL/real browser
+FR-5.9,Super Admin overview dashboard,Must,Later,Pending-approvals list suffices,Not verified on PostgreSQL/real browser
+FR-5.10,Accounts and Venues admin modules,Must,Yes†,Accounts list and approvals only,Not verified on PostgreSQL/real browser
+FR-5.11,Master data module,Must,Later,"Seed sports, positions, cities",Not verified on PostgreSQL/real browser
+FR-5.12,Settings module,Must,Later,Seeded read-only settings,Not verified on PostgreSQL/real browser
+FR-5.13,Credit and disputes admin module,Must,Later,Players see own ledger only,Not verified on PostgreSQL/real browser
+FR-5.14,Append-only audit log; search and export,Must,Yes†,Write path now; viewer Later,Not verified on PostgreSQL/real browser
+FR-5.15,In-app bell; e-mail for critical events,Must,Yes†,OTP/invite e-mails only; bell Later,Not verified on PostgreSQL/real browser
+FR-5.16,Push registration and delivery,Should,Later,App not in MVP,Not verified on PostgreSQL/real browser
+FR-5.17,Identical rules and data across clients,Must,Yes,Satisfied by thin-client architecture,Not verified on PostgreSQL/real browser
+FR-5.18,Client/version header; update-required response,Must,Later,Needed before first app release,Not verified on PostgreSQL/real browser

@@ -1,0 +1,47 @@
+# Render Blueprint for the API (free plan). Create it with: Render dashboard -> New -> Blueprint -> pick this repository.
+# See docs/DEPLOY.md. Facts behind these settings were checked in October 2026 (findings F1 to F3).
+services:
+  - type: web
+    name: athleteverse-api
+    runtime: node
+    plan: free
+    region: singapore            # pick the region nearest your users AND your Neon region (oregon | ohio | virginia | frankfurt | singapore).
+                                 # Render cannot change a service's region later, so decide before the first deploy.
+    branch: main
+    autoDeploy: true
+    # Dev dependencies are needed to build (prisma CLI). Migrations run during the build, so a failing migration
+    # keeps the previous version live. Render's free plan has no pre-deploy command.
+    buildCommand: npm ci --include=dev && npm run db:generate && npm run db:deploy
+    # `exec node` (not `npm run start`): npm does not forward SIGTERM to the server, so a deploy would end with SIGKILL
+    # instead of the graceful shutdown in server.ts (finding F7). tsx is a runtime dependency; it runs the TypeScript directly.
+    startCommand: exec node --import tsx apps/api/src/server.ts
+    # Render calls this path every few seconds. It must NOT query the database (finding F2): a query each time keeps a free
+    # Neon database awake all month and uses up its 100 compute hours in about two weeks.
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL        # Neon POOLED connection string (host contains "-pooler")
+        sync: false
+      - key: DIRECT_URL          # Neon DIRECT connection string, used only by `prisma migrate deploy` during the build
+        sync: false
+      - key: JOB_SECRET          # generated once; copy it into the GitHub secret JOB_SECRET (docs/DEPLOY.md step 5)
+        generateValue: true
+      - key: JWT_SECRET          # signs the 15-minute access tokens; generated once, never reuse it elsewhere
+        generateValue: true
+      - key: OTP_PEPPER          # keys the hash of stored e-mail codes; generated once
+        generateValue: true
+      - key: MAIL_PROVIDER       # brevo | resend | console (decide after spike S3). "console" prints codes to the log: demos only
+        sync: false
+      - key: MAIL_API_KEY        # ignored for console; enter any placeholder then
+        sync: false
+      - key: MAIL_FROM           # "AthleteVerse <your validated sender>"; ignored for console
+        sync: false
+      - key: PLATFORM_TZ
+        value: UTC               # set the IANA zone of the launch city once OI-1 is answered
+      - key: TRUST_PROXY_HOPS
+        value: "0"               # set after spike S2 measures the Vercel -> Render chain
+      - key: ENABLE_SPIKES
+        value: "false"           # set to true ONLY while running spike S2, then back to false

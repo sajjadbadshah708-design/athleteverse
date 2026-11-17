@@ -1,0 +1,21 @@
+# Local PostgreSQL 15 for development and tests (SRS C3, MNT-1).
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: athleteverse
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro   # creates athleteverse_test on first start
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d athleteverse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata: {}

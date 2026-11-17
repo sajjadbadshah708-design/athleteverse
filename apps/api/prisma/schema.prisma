@@ -1,0 +1,406 @@
+// AthleteVerse data model, MVP subset (SRS Section 10, Phase 2 Section 2).
+// Constraints Prisma cannot express (CHECK, EXCLUDE, expression indexes, audit trigger) live in integrity.sql.
+// Enum values must match packages/shared/src/enums.ts (test/enums.test.ts).
+// Every relation is ON DELETE RESTRICT (SRS Table 30, section 10.1).
+
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "client" // Rust-free client + pg driver adapter (src/db/prisma.ts): no native engine to download
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  PLAYER
+  MANAGER
+  STAFF
+  ADMIN
+
+  @@map("user_role")
+}
+
+enum UserStatus {
+  UNVERIFIED
+  PENDING_APPROVAL
+  ACTIVE
+  SUSPENDED
+  REJECTED
+
+  @@map("user_status")
+}
+
+enum BookingStatus {
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+
+  @@map("booking_status")
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  UNPAID
+
+  @@map("payment_status")
+}
+
+enum CreditEventType {
+  LATE_CANCEL
+  LASTMIN_CANCEL
+  NO_SHOW
+  UNPAID
+  FORFEIT
+  RECOVERY
+  REVERSAL
+  ADMIN_ADJUST
+  AUTO_RESTORE
+
+  @@map("credit_event_type")
+}
+
+enum VenueStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+
+  @@map("venue_status")
+}
+
+enum CourtStatus {
+  ACTIVE
+  UNDER_MAINTENANCE
+  INACTIVE
+
+  @@map("court_status")
+}
+
+enum BlockReason {
+  MANAGER
+  TOURNAMENT
+
+  @@map("block_reason")
+}
+
+enum Client {
+  WEB
+  ANDROID
+  IOS
+
+  @@map("client_type")
+}
+
+enum TokenPurpose {
+  EMAIL_VERIFY
+  LOGIN_OTP
+  STAFF_INVITE
+  PASSWORD_RESET
+
+  @@map("token_purpose")
+}
+
+enum DisputeStatus {
+  OPEN
+  ACCEPTED
+  REJECTED
+  ESCALATED
+
+  @@map("dispute_status")
+}
+
+// ---------- Reference data (seeded) ----------
+
+model City {
+  id       Int     @id @default(autoincrement())
+  name     String  @unique
+  isActive Boolean @default(true) @map("is_active")
+
+  playerProfiles PlayerProfile[]
+  venues         Venue[]
+
+  @@map("cities")
+}
+
+model Sport {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  minTeamSize Int     @map("min_team_size")
+  maxTeamSize Int     @map("max_team_size")
+  isActive    Boolean @default(true) @map("is_active")
+
+  courts Court[]
+
+  @@map("sports")
+}
+
+// ---------- Accounts (F1) ----------
+
+model User {
+  id              String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email           String     @unique // stored lower-case (CHECK)
+  phone           String     @unique // digits only, 9-15 (CHECK)
+  role            Role
+  status          UserStatus
+  fullName        String     @map("full_name")
+  passwordHash    String?    @map("password_hash") // NULL until a staff invitation is accepted
+  creditScore     Int        @default(100) @map("credit_score") // 0..100 (CHECK), only apps/api/src/modules/credit writes it
+  blockedAt       DateTime?  @map("blocked_at") @db.Timestamptz(3) // set when the score reaches 0 (N5, D2)
+  isOwner         Boolean    @default(false) @map("is_owner") // SA-1
+  emailVerified   Boolean    @default(false) @map("email_verified")
+  termsAcceptedAt DateTime?  @map("terms_accepted_at") @db.Timestamptz(3)
+  failedLogins    Int        @default(0) @map("failed_logins")
+  lockedUntil     DateTime?  @map("locked_until") @db.Timestamptz(3)
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt       DateTime?  @map("deleted_at") @db.Timestamptz(3)
+
+  playerProfile       PlayerProfile?
+  managerProfile      ManagerProfile?  @relation("ManagerProfileUser")
+  reviewedManagers    ManagerProfile[] @relation("ManagerReviewer")
+  staffProfile        StaffProfile?    @relation("StaffProfileUser")
+  invitedStaff        StaffProfile[]   @relation("StaffInviter")
+  sessions            UserSession[]
+  authTokens          AuthToken[]
+  venues              Venue[]
+  courtBlocks         CourtBlock[]
+  bookings            Booking[]        @relation("BookingPlayer")
+  handledBookings     Booking[]        @relation("BookingHandler")
+  cancelledBookings   Booking[]        @relation("BookingCanceller")
+  creditEvents        CreditEvent[]    @relation("CreditEventUser")
+  decidedCreditEvents CreditEvent[]    @relation("CreditEventDecider")
+  auditLogs           AuditLog[]
+  updatedSettings     Setting[]
+
+  @@map("users")
+}
+
+// A row exists only once the player has completed the profile (narrowed gate, M2): city and date of birth are required.
+model PlayerProfile {
+  userId      String   @id @map("user_id") @db.Uuid
+  cityId      Int      @map("city_id")
+  area        String? // <= 50 chars (CHECK)
+  dateOfBirth DateTime @map("date_of_birth") @db.Date // age >= 16 checked in the service; never displayed (FR-1.16)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  city City @relation(fields: [cityId], references: [id], onDelete: Restrict)
+
+  @@map("player_profiles")
+}
+
+model ManagerProfile {
+  userId          String    @id @map("user_id") @db.Uuid
+  businessName    String    @map("business_name")
+  nationalIdNo    String    @unique @map("national_id_no")
+  businessAddress String    @map("business_address")
+  proofUrl        String?   @map("proof_url")
+  reviewedById    String?   @map("reviewed_by") @db.Uuid
+  reviewedAt      DateTime? @map("reviewed_at") @db.Timestamptz(3)
+  rejectionReason String?   @map("rejection_reason")
+
+  user       User  @relation("ManagerProfileUser", fields: [userId], references: [id], onDelete: Restrict)
+  reviewedBy User? @relation("ManagerReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+
+  @@map("manager_profiles")
+}
+
+model StaffProfile {
+  userId      String    @id @map("user_id") @db.Uuid
+  venueId     String    @map("venue_id") @db.Uuid
+  invitedById String    @map("invited_by") @db.Uuid
+  disabledAt  DateTime? @map("disabled_at") @db.Timestamptz(3) // D5: independent of users.status
+
+  user      User  @relation("StaffProfileUser", fields: [userId], references: [id], onDelete: Restrict)
+  venue     Venue @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  invitedBy User  @relation("StaffInviter", fields: [invitedById], references: [id], onDelete: Restrict)
+
+  @@index([venueId])
+  @@map("staff_profiles")
+}
+
+model UserSession {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  client           Client
+  deviceName       String?   @map("device_name")
+  appVersion       String?   @map("app_version")
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt       DateTime  @default(now()) @map("last_used_at") @db.Timestamptz(3)
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, revokedAt])
+  @@map("user_sessions")
+}
+
+model AuthToken {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  purpose   TokenPurpose
+  tokenHash String       @map("token_hash")
+  expiresAt DateTime     @map("expires_at") @db.Timestamptz(3)
+  attempts  Int          @default(0)
+  usedAt    DateTime?    @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, purpose, createdAt])
+  @@map("auth_tokens")
+}
+
+// ---------- Venues, courts (F2, F5) ----------
+
+model Venue {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  managerId     String      @map("manager_id") @db.Uuid
+  name          String // unique per city, case-insensitive (integrity.sql)
+  description   String?
+  address       String
+  cityId        Int         @map("city_id")
+  phone         String
+  latitude      Decimal?    @db.Decimal(9, 6) // nullable in the MVP (M5)
+  longitude     Decimal?    @db.Decimal(9, 6)
+  openHour      Int         @map("open_hour") @db.SmallInt // 0..23 (D1)
+  closeHour     Int         @map("close_hour") @db.SmallInt // 1..24, > openHour
+  peakStartHour Int?        @map("peak_start_hour") @db.SmallInt
+  peakEndHour   Int?        @map("peak_end_hour") @db.SmallInt
+  status        VenueStatus @default(ACTIVE)
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  manager User           @relation(fields: [managerId], references: [id], onDelete: Restrict)
+  city    City           @relation(fields: [cityId], references: [id], onDelete: Restrict)
+  courts  Court[]
+  staff   StaffProfile[]
+
+  @@index([managerId])
+  @@index([cityId, status])
+  @@map("venues")
+}
+
+model Court {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  venueId      String      @map("venue_id") @db.Uuid
+  sportId      Int         @map("sport_id")
+  name         String // unique per venue, case-insensitive (integrity.sql)
+  priceRegular Decimal     @map("price_regular") @db.Decimal(10, 2)
+  pricePeak    Decimal?    @map("price_peak") @db.Decimal(10, 2)
+  status       CourtStatus @default(ACTIVE)
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  venue    Venue        @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  sport    Sport        @relation(fields: [sportId], references: [id], onDelete: Restrict)
+  bookings Booking[]
+  blocks   CourtBlock[]
+
+  @@index([venueId])
+  @@map("courts")
+}
+
+// Table, exclusion constraint and the booking re-check ship now; manager endpoints are Later (FR-5.4, M6).
+model CourtBlock {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  courtId     String      @map("court_id") @db.Uuid
+  startTime   DateTime    @map("start_time") @db.Timestamptz(3)
+  endTime     DateTime    @map("end_time") @db.Timestamptz(3)
+  reason      BlockReason
+  note        String?
+  createdById String      @map("created_by") @db.Uuid
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  court     Court @relation(fields: [courtId], references: [id], onDelete: Restrict)
+  createdBy User  @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([courtId, startTime])
+  @@map("court_blocks")
+}
+
+// ---------- Bookings and credit ledger (F2) ----------
+
+model Booking {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingCode    String        @unique @map("booking_code") @db.Char(8)
+  courtId        String        @map("court_id") @db.Uuid
+  playerId       String        @map("player_id") @db.Uuid
+  startTime      DateTime      @map("start_time") @db.Timestamptz(3)
+  endTime        DateTime      @map("end_time") @db.Timestamptz(3)
+  totalPrice     Decimal       @map("total_price") @db.Decimal(10, 2) // snapshot at booking time (FR-2.10)
+  status         BookingStatus @default(CONFIRMED)
+  paymentStatus  PaymentStatus @default(PENDING) @map("payment_status")
+  amountReceived Decimal?      @map("amount_received") @db.Decimal(10, 2)
+  handledById    String?       @map("handled_by") @db.Uuid
+  handledAt      DateTime?     @map("handled_at") @db.Timestamptz(3)
+  cancelledById  String?       @map("cancelled_by") @db.Uuid
+  cancelReason   String?       @map("cancel_reason")
+  cancelledAt    DateTime?     @map("cancelled_at") @db.Timestamptz(3)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  court        Court         @relation(fields: [courtId], references: [id], onDelete: Restrict)
+  player       User          @relation("BookingPlayer", fields: [playerId], references: [id], onDelete: Restrict)
+  handledBy    User?         @relation("BookingHandler", fields: [handledById], references: [id], onDelete: Restrict)
+  cancelledBy  User?         @relation("BookingCanceller", fields: [cancelledById], references: [id], onDelete: Restrict)
+  creditEvents CreditEvent[]
+
+  @@index([courtId, startTime])
+  @@index([playerId, startTime])
+  @@index([status, endTime])
+  @@map("bookings")
+}
+
+model CreditEvent {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String          @map("user_id") @db.Uuid
+  bookingId     String?         @map("booking_id") @db.Uuid
+  eventType     CreditEventType @map("event_type")
+  points        Int
+  scoreAfter    Int             @map("score_after")
+  disputeStatus DisputeStatus?  @map("dispute_status") // unused until disputes ship (M3), kept to avoid a later migration
+  disputeReason String?         @map("dispute_reason")
+  decidedById   String?         @map("decided_by") @db.Uuid
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user      User     @relation("CreditEventUser", fields: [userId], references: [id], onDelete: Restrict)
+  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  decidedBy User?    @relation("CreditEventDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+
+  @@unique([bookingId, eventType]) // a penalty or recovery applies once per booking (Table 30). NULL booking ids are not constrained (N2)
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("credit_events")
+}
+
+// ---------- System ----------
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String
+  targetType String   @map("target_type")
+  targetId   String   @map("target_id")
+  reason     String?
+  oldValue   Json?    @map("old_value")
+  newValue   Json?    @map("new_value")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([targetType, targetId])
+  @@index([createdAt])
+  @@map("audit_logs") // append-only: trigger in integrity.sql (SEC-8)
+}
+
+model Setting {
+  key         String   @id
+  value       Json
+  updatedById String?  @map("updated_by") @db.Uuid
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@map("settings")
+}

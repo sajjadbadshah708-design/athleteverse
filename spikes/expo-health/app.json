@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "AthleteVerse Connectivity Spike",
+    "slug": "athleteverse-health-spike",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": { "supportsTablet": true },
+    "android": { "edgeToEdgeEnabled": true }
+  }
+}
