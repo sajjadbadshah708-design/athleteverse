@@ -1,11 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "vite",
+  "framework": null,
   "installCommand": "cd ../.. && npm ci",
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "https://REPLACE-WITH-YOUR-RENDER-HOST.onrender.com/api/:path*" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+  "buildCommand": "cd ../.. && npm run db:generate && npm run build -w @athleteverse/web && node scripts/vercel-output.mjs"
 }

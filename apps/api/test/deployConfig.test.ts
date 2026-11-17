@@ -58,28 +58,34 @@ describe('render.yaml', () => {
   });
 });
 
-describe('apps/web/vercel.json', () => {
-  const config = JSON.parse(read('apps/web/vercel.json')) as {
-    framework: string;
-    installCommand: string;
-    buildCommand: string;
-    outputDirectory: string;
-    rewrites: { source: string; destination: string }[];
-  };
+describe('apps/web/vercel.json (web app and API in one Vercel project, decision 2026-11-17)', () => {
+  const config = JSON.parse(read('apps/web/vercel.json')) as Record<string, unknown>;
 
-  it('builds the Vite app from the repository root, so the shared package is installed too (T6)', () => {
-    expect(config.framework).toBe('vite');
+  it('installs from the repository root, generates Prisma, builds the web app, then assembles the Build Output', () => {
+    expect(config.framework).toBeNull(); // the Build Output API decides what is served, not a framework preset
     expect(config.installCommand).toBe('cd ../.. && npm ci');
-    expect(config.buildCommand).toBe('npm run build');
-    expect(config.outputDirectory).toBe('dist');
+    expect(config.buildCommand).toBe('cd ../.. && npm run db:generate && npm run build -w @athleteverse/web && node scripts/vercel-output.mjs');
   });
 
-  it('forwards /api/* to the API before the single-page fallback (Phase 2: one origin, no CORS)', () => {
-    const [api, fallback] = config.rewrites;
-    expect(api!.source).toBe('/api/:path*');
-    expect(api!.destination).toMatch(/^https:\/\/.+\/api\/:path\*$/);
-    expect(fallback!.destination).toBe('/index.html');
-    expect(config.rewrites.indexOf(api!)).toBeLessThan(config.rewrites.indexOf(fallback!));
+  it('has no rewrite to an external API host and no static output directory (scripts/vercel-output.mjs owns routing)', () => {
+    expect(config).not.toHaveProperty('rewrites');
+    expect(config).not.toHaveProperty('outputDirectory');
+  });
+});
+
+describe('scripts/vercel-output.mjs', () => {
+  const script = read('scripts/vercel-output.mjs');
+
+  it('applies migrations on production builds only, never on preview builds', () => {
+    expect(script).toContain("process.env.VERCEL_ENV === 'production'");
+    expect(script).toContain('npm run db:deploy');
+  });
+
+  it('routes /api to the function before the single-page fallback, on Node 22', () => {
+    expect(script.indexOf("dest: '/api'")).toBeGreaterThan(-1);
+    expect(script.indexOf("dest: '/api'")).toBeLessThan(script.indexOf("dest: '/index.html'"));
+    expect(script).toContain("runtime: 'nodejs22.x'");
+    expect(script).toContain("'@prisma/client', '.prisma/client'"); // kept outside the bundle and copied beside it
   });
 });
 
@@ -90,8 +96,8 @@ describe('.github/workflows/tick.yml', () => {
   };
   const step = workflow.jobs.tick.steps[0]!;
 
-  it('runs every 10 minutes (SRS Table 8)', () => {
-    expect(workflow.on.schedule[0]!.cron).toBe('*/10 * * * *');
+  it('runs every 30 minutes: on Vercel nothing needs keeping awake, and the free Neon database can sleep (decision Q5)', () => {
+    expect(workflow.on.schedule[0]!.cron).toBe('*/30 * * * *');
   });
 
   it('authenticates with the secret header, taken from repository secrets, and fails when a job failed', () => {

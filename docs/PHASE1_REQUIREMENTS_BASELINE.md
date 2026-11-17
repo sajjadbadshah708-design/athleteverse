@@ -147,6 +147,7 @@ Enforced on the server per request (role, account status, venue ownership): FR-1
 | A3 | Table 15 "Unpaid … flagged to the manager" | No flag; Unpaid only shows as a payment status | Is the status label enough for the MVP (notifications are Later)? |
 | A4 | Manager cancellation of a started booking | **Resolved 2026-11-17**: kept as is. FR-2.22 says "any booking" and the cancellation carries no penalty. | – |
 | A5 | OI-1 launch time zone | **Resolved 2026-11-17 (assumed)**: `PLATFORM_TZ=Asia/Karachi` in `render.yaml` and `.env.example` (+92 phone numbers, team in Pakistan). Currency stays plain amounts (A1). | Change `render.yaml` if the launch city differs |
+| A7b | Hosting (SRS 3.3: API on Render) vs. zero budget (C1) | **Resolved 2026-11-17, owner approved:** Render requires a payment card even on its free plan. The API runs as a Vercel function in the web app's project; Neon (Singapore) unchanged; GitHub timer every 30 minutes instead of 10 (Table 8 / 3.4 cadence: no keep-alive needed, Neon quota). `render.yaml` kept as the alternative. | – |
 | A6 | Runtime | Local Node v24.18.0; project and Render target Node 22 | Install Node 22 locally for parity? |
 | A7 | FR-2.12 (booking notifications) and FR-2.26 (disputes) are SRS **Must** but scoped Later | Booking e-mail sent; no disputes | Stakeholder acknowledgement of the fairness risk is recorded in `MVP_COMPLETION_REPORT.md` |
 

@@ -76,6 +76,8 @@ Not performed: load test (PERF-3: 100 users, 10 bookings/s), five-user usability
 
 ## 7. Deployment status
 
+> **Changed 2026-11-17 (owner approved):** Render requires a payment card even for its free plan, and the budget is zero (C1). The API therefore runs as a **Vercel function in the same project as the web app** (`apps/api/src/vercel.ts`, `scripts/vercel-output.mjs`), with Neon in Singapore and the GitHub timer every 30 minutes. The packaged function was checked locally from an isolated folder. `render.yaml` remains as the alternative. The steps below describe the original Render plan; the current steps are at the top of [DEPLOY.md](DEPLOY.md).
+
 **Not deployed.** The configuration is ready and guarded by tests: `render.yaml` (free plan, Node 22, migrations at build, liveness-only health check, generated secrets), `apps/web/vercel.json` (one origin through the `/api` rewrite), `.github/workflows/ci.yml` (Node 22, PostgreSQL 15) and `tick.yml` (timed jobs every 10 minutes).
 
 **Owner actions required (in order):**

@@ -1,11 +1,12 @@
-# Calls the API's job runner every 10 minutes (SRS 3.4). It also keeps the free Render service from sleeping.
-# Repository secrets needed: API_URL (e.g. https://athleteverse-api.onrender.com, no trailing slash) and JOB_SECRET.
+# Calls the API's job runner every 30 minutes (SRS 3.4, decision Q5). The API runs as a Vercel function (decision
+# 2026-11-17), so nothing needs keeping awake, and a 30-minute rhythm lets the free Neon database sleep in between.
+# Repository secrets needed: API_URL (the Vercel site, e.g. https://athleteverse.vercel.app, no trailing slash) and JOB_SECRET.
 # GitHub runs scheduled workflows on a best-effort basis (they can start late) and pauses them on a public repository
 # after 60 days without activity; re-enable them in the Actions tab if that happens.
 name: tick
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch: {}
 
 concurrency:

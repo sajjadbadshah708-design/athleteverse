@@ -1,7 +1,40 @@
 # Deploying AthleteVerse on free tiers (T4)
 
-Targets: web on **Vercel**, API on **Render**, database on **Neon**, cron on **GitHub Actions** (SRS 3.3, Tables 7 and 8).
-Everything in this repository is built and tested. The steps below need **your accounts** and cannot be done from code.
+**Current targets (decision 2026-11-17):** web app **and API** on **Vercel** (one project), database on **Neon** (Singapore),
+timed jobs on **GitHub Actions**. Render, the SRS 3.3 choice, now requires a payment card even for its free plan and the
+budget is zero (C1), so the API runs as a Vercel function. The Render setup below (sections 3 and 4) is kept as an
+alternative if a card becomes available. Everything in this repository is built and tested; the steps need **your
+accounts** and cannot be done from code.
+
+## Vercel setup (current)
+
+How it works: `apps/web/vercel.json` installs from the repository root, generates Prisma, builds the web app and runs
+`scripts/vercel-output.mjs`, which writes Vercel's Build Output: the web app as static files, the API (`apps/api/src/vercel.ts`
+bundled with esbuild, Prisma copied beside it) as one Node 22 function, and routes `/api/*` to the function. Web and API
+share one address, so the login cookies are first-party and no CORS or rewrite is needed. **Migrations run on production
+builds only** (`VERCEL_ENV=production`), never on preview builds. Checked locally on 2026-11-17: the packaged function,
+run from a folder outside the repository, served health, database queries, sign-in with cookies, the manager home and the
+job runner; a misconfigured start answers 500 and logs the missing settings without values.
+
+1. **Neon:** project in **AWS Asia Pacific (Singapore)**, database `athleteverse`. Copy the pooled address (host contains
+   `-pooler`) and the direct address (pooling off).
+2. **Vercel -> Add New Project ->** import the GitHub repository, **Root Directory `apps/web`**, keep "Include source files
+   outside of the Root Directory" on. Build settings come from `vercel.json`; do not override them. Node.js version 22.x.
+3. **Environment variables** (Production): `DATABASE_URL` (pooled), `DIRECT_URL` (direct), `NODE_ENV=production`,
+   `PLATFORM_TZ=Asia/Karachi`, `TRUST_PROXY_HOPS=1`, `MAIL_PROVIDER=console` (or `brevo` with `MAIL_API_KEY`, `MAIL_FROM`),
+   `WEB_BASE_URL=https://<project>.vercel.app`, and three random secrets of at least 32 characters: `JOB_SECRET`,
+   `JWT_SECRET`, `OTP_PEPPER`. Generate each locally without displaying it and paste it from the clipboard:
+   `node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64url'))" | clip` (Windows).
+   Do not set `JOB_DB_INTERVAL_MINUTES` (0: every tick; the cron itself runs every 30 minutes).
+4. **Deploy.** The first production build applies the migrations. Check `https://<project>.vercel.app/api/v1/health` and
+   `?db=true`.
+5. **Owner admin:** seed once from your machine with the direct address (section 2, step 4), demo data only if wanted.
+6. **GitHub secrets** `API_URL` (`https://<project>.vercel.app`) and `JOB_SECRET` (the same value as in Vercel), then run
+   the **tick** workflow once by hand. It runs every 30 minutes afterwards.
+
+Limits to know: Vercel Hobby is for non-commercial use (fine for an academic pilot); in-memory rate limits count per
+function instance, so the per-IP limits are weaker than on one server, while the 5-failure account lock (FR-1.7) is stored
+in the database and unaffected.
 
 ## 0. Findings that shaped this task (checked October 2026)
 
@@ -36,7 +69,7 @@ Everything in this repository is built and tested. The steps below need **your a
    ```
    On Windows use Git Bash, or put the variables in `apps/api/.env` temporarily and delete them afterwards.
 
-## 3. Render (API)
+## 3. Render (API) — alternative only: needs a payment card (see top)
 
 1. Edit `region` in `render.yaml` if needed, commit and push.
 2. Render dashboard -> **New** -> **Blueprint** -> select the repository. When asked, paste `DATABASE_URL` (pooled) and `DIRECT_URL` (direct).
@@ -46,13 +79,13 @@ Everything in this repository is built and tested. The steps below need **your a
 3. After the first deploy, open **Environment** and copy the generated `JOB_SECRET` (you need it in step 5). `JWT_SECRET` and `OTP_PEPPER` are generated too; do not copy them anywhere.
 4. Check: `curl https://<service>.onrender.com/api/v1/health` returns `"status":"ok"`.
 
-## 4. Vercel (the web app)
+## 4. Vercel web app with the Render API — alternative only
 
 1. In `apps/web/vercel.json` replace `REPLACE-WITH-YOUR-RENDER-HOST.onrender.com` with your Render host, commit and push.
 2. Vercel -> **Add New Project** -> import the repository -> set **Root Directory** to `apps/web`. Leave the build settings: `vercel.json` defines them (it installs from the repository root, then builds the Vite app into `dist`). Under **Settings -> General** set **Node.js Version** to 22.x (React Router 8 needs Node 22.22 or newer) and keep "Include source files outside of the Root Directory" switched on; the build needs `packages/shared`.
 3. **Done when (part 1):** open `https://<site>.vercel.app`. It shows the **Sign in** page (not an error), and `curl https://<site>.vercel.app/api/v1/health` returns the API's health JSON through the rewrite. If the build fails with "cannot find @athleteverse/shared", the "source files outside the Root Directory" setting is off.
 
-## 5. GitHub (cron)
+## 5. GitHub (cron) — for the Render alternative; the Vercel setup covers this in its step 6
 
 1. Repository -> **Settings** -> **Secrets and variables** -> **Actions** -> add `API_URL` (the Render URL, no trailing slash) and `JOB_SECRET` (copied in step 3.3).
 2. **Actions** -> **tick** -> **Run workflow**. It must finish green.
