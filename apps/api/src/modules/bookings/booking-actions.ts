@@ -172,7 +172,8 @@ export async function recordOutcome(deps: AppDeps, actor: { userId: string; role
     const delta = outcome === 'PAID' ? recover : outcome === 'NO_SHOW' ? -noShow : -unpaid;
     const score = await applyCredit(deps, tx, { userId: source.playerId, bookingId, eventType, delta, actorId: actor.userId, at: now });
     const [good, caution] = await Promise.all([deps.settings.get('tier_good'), deps.settings.get('tier_caution')]);
-    const creditTier = score === 0 ? 'BLOCKED' as const : tierOf(score, { good, caution });
+    const { blockedAt } = await tx.user.findUniqueOrThrow({ where: { id: source.playerId }, select: { blockedAt: true } });
+    const creditTier = blockedAt ? 'BLOCKED' as const : tierOf(score, { good, caution });
     await tx.auditLog.create({ data: { createdAt: now, actorId: actor.userId, action: 'BOOKING_OUTCOME', targetType: 'Booking', targetId: bookingId, newValue: { outcome, amount: received } } });
     return { ok: true as const, creditScore: score, creditTier };
   });

@@ -30,7 +30,9 @@ export async function applyCredit(deps: AppDeps, tx: Tx, input: {
   } });
   await tx.user.update({ where: { id: input.userId }, data: {
     creditScore: scoreAfter,
-    blockedAt: scoreAfter === 0 ? (user.blockedAt ?? now) : null,
+    // Reaching 0 blocks the player. Once blocked, only the 30-day restore job or the Super Admin ends the block (SRS 5.5);
+    // points earned meanwhile still count but do not lift it.
+    blockedAt: user.blockedAt ?? (scoreAfter === 0 ? now : null),
   } });
   await tx.auditLog.create({ data: { createdAt: now,
     actorId: input.actorId ?? input.userId, action: `CREDIT_${input.eventType}`,

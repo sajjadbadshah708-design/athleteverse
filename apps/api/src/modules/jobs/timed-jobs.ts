@@ -28,23 +28,28 @@ export const autoCloseBookings: Job = {
   },
 };
 
-/** FR-2.28: restore a player blocked for 30 days to 20. The credit ledger records this just once per block interval. */
+/**
+ * FR-2.28: 30 days after a player was blocked, the block ends and the score returns to 20 (or stays higher if points were
+ * earned while blocked). The credit ledger records this just once per block interval.
+ */
 export const restoreBlockedAccounts: Job = {
   name: 'restore_blocked_players',
   async run(deps) {
     const [days, restoredScore] = await Promise.all([deps.settings.get('blocked_restore_days'), deps.settings.get('blocked_restore_score')]);
-    const deadline = new Date(deps.clock.now().getTime() - days * 86400000);
-    const users = await deps.prisma.user.findMany({ where: { role: 'PLAYER', blockedAt: { lte: deadline }, creditScore: 0 }, select: { id: true } });
+    const now = deps.clock.now();
+    const deadline = new Date(now.getTime() - days * 86400000);
+    const users = await deps.prisma.user.findMany({ where: { role: 'PLAYER', blockedAt: { lte: deadline } }, select: { id: true } });
     let affected = 0;
     for (const user of users) {
       const updated = await withTx(deps.prisma, async tx => {
         await lockUser(tx, user.id);
         const row = await tx.user.findUniqueOrThrow({ where: { id: user.id } });
-        if (!row.blockedAt || row.blockedAt > deadline || row.creditScore !== 0) return false;
-        const result = await tx.user.updateMany({ where: { id: row.id, creditScore: 0, blockedAt: { lte: deadline } }, data: { creditScore: restoredScore, blockedAt: null } });
-        if (!result.count) return false;
-        await tx.creditEvent.create({ data: { userId: row.id, eventType: 'AUTO_RESTORE', points: restoredScore, scoreAfter: restoredScore, createdAt: deps.clock.now() } });
-        await tx.auditLog.create({ data: { createdAt: deps.clock.now(), action: 'CREDIT_AUTO_RESTORE', targetType: 'User', targetId: row.id, reason: `${days}-day blocked period ended`, newValue: { creditScore: restoredScore } } });
+        if (!row.blockedAt || row.blockedAt > deadline) return false; // already restored by a parallel run
+        const scoreAfter = Math.max(row.creditScore, restoredScore);
+        await tx.user.update({ where: { id: row.id }, data: { creditScore: scoreAfter, blockedAt: null } });
+        await tx.creditEvent.create({ data: { userId: row.id, eventType: 'AUTO_RESTORE', points: scoreAfter - row.creditScore, scoreAfter, createdAt: now } });
+        await tx.auditLog.create({ data: { createdAt: now, action: 'CREDIT_AUTO_RESTORE', targetType: 'User', targetId: row.id, reason: `${days}-day blocked period ended`,
+          oldValue: { creditScore: row.creditScore }, newValue: { creditScore: scoreAfter } } });
         return true;
       });
       if (updated) affected++;

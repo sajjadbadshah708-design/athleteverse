@@ -317,6 +317,48 @@ describe('timed jobs through POST /api/jobs/tick (Table 8, REL-3)', () => {
   });
 });
 
+describe('leaving the Blocked tier (SRS 5.5, FR-2.25, FR-2.28)', () => {
+  const tick = () => request(app).post('/api/jobs/tick').set('X-Job-Secret', TEST_JOB_SECRET);
+
+  it('keeps a player Blocked when they later earn points: only the 30-day restore or the Super Admin ends a block', async () => {
+    const id = await createBooking();
+    clock.set(minutes(70));
+    const manager = await signIn(managerEmail);
+    await prisma.user.update({ where: { id: playerId }, data: { creditScore: 50 } });
+    await manager.post(`/api/v1/operations/bookings/${id}/outcome`).send({ outcome: 'UNPAID' }); // 50 - 50 = 0: Blocked
+    const blockedAt = (await credit()).blockedAt;
+    expect(blockedAt).not.toBeNull();
+
+    // A booking of the same player that was closed automatically earlier is now confirmed as paid: +5 points.
+    const old = await prisma.booking.create({ data: { bookingCode: 'OLDPAID1', courtId, playerId, startTime: new Date('2030-01-14T10:00:00Z'),
+      endTime: new Date('2030-01-14T11:00:00Z'), totalPrice: '20.00', status: 'COMPLETED' } });
+    const paid = await manager.post(`/api/v1/operations/bookings/${old.id}/outcome`).send({ outcome: 'PAID' });
+    expect(paid.body).toMatchObject({ creditScore: 5, creditTier: 'BLOCKED' });
+    expect(await credit()).toEqual({ creditScore: 5, blockedAt });
+    const summary = await (await signIn(playerEmail)).get('/api/v1/me/credit');
+    expect(summary.body).toMatchObject({ score: 5, tier: 'BLOCKED' });
+    clock.set(minutes(-6 * 60)); // a fresh booking is refused while Blocked
+    const refused = await (await signIn(playerEmail)).post('/api/v1/bookings').send({ courtId, startsAt: '2030-01-17T17:00:00.000Z', slots: 1 });
+    expect(refused.body.error?.code).toBe('TIER_LIMIT');
+  });
+
+  it('restores to 20 after 30 days, keeping points earned while Blocked when they are higher', async () => {
+    const blockedAt = new Date('2030-01-01T00:00:00.000Z');
+    await prisma.user.update({ where: { id: playerId }, data: { creditScore: 25, blockedAt } });
+    clock.set(new Date(blockedAt.getTime() + 30 * 86400000));
+    await tick();
+    expect(await credit()).toEqual({ creditScore: 25, blockedAt: null });
+    expect(await prisma.creditEvent.findMany({ where: { userId: playerId }, select: { eventType: true, points: true, scoreAfter: true } }))
+      .toEqual([{ eventType: 'AUTO_RESTORE', points: 0, scoreAfter: 25 }]);
+
+    const other = await createUser(prisma);
+    await prisma.user.update({ where: { id: other.id }, data: { creditScore: 5, blockedAt } });
+    await tick(); // the first player is not touched twice; the second rises from 5 to 20
+    expect(await prisma.user.findUniqueOrThrow({ where: { id: other.id }, select: { creditScore: true, blockedAt: true } })).toEqual({ creditScore: 20, blockedAt: null });
+    expect(await prisma.creditEvent.count({ where: { userId: playerId } })).toBe(1);
+  });
+});
+
 describe('arena limits (Table 11, FR-1.18)', () => {
   it('allows 3 venues per manager, 10 courts per venue and 5 staff per venue, and refuses one more', async () => {
     const manager = await signIn(managerEmail);
