@@ -65,8 +65,8 @@ export async function cancelMyBooking(deps: AppDeps, playerId: string, bookingId
     if (band === 'STARTED') throw new AppError('BOOKING_STARTED', 'A booking cannot be cancelled after it starts');
     const penalty = band === 'LATE' ? -latePoints : band === 'LAST_MINUTE' ? -lastPoints : 0;
     await tx.booking.update({ where: { id: bookingId }, data: { status: 'CANCELLED', cancelledAt: now, cancelledById: playerId, cancelReason: `Player cancellation (${band})` } });
-    if (penalty) await applyCredit(deps, tx, { userId: playerId, bookingId, eventType: band === 'LATE' ? 'LATE_CANCEL' : 'LASTMIN_CANCEL', delta: penalty });
-    await tx.auditLog.create({ data: { createdAt: deps.clock.now(), actorId: playerId, action: 'BOOKING_CANCELLED', targetType: 'Booking', targetId: bookingId, reason: `Player cancellation ${band}`, newValue: { band, penalty } } });
+    if (penalty) await applyCredit(deps, tx, { userId: playerId, bookingId, eventType: band === 'LATE' ? 'LATE_CANCEL' : 'LASTMIN_CANCEL', delta: penalty, at: now });
+    await tx.auditLog.create({ data: { createdAt: now, actorId: playerId, action: 'BOOKING_CANCELLED', targetType: 'Booking', targetId: bookingId, reason: `Player cancellation ${band}`, newValue: { band, penalty } } });
     return { ok: true as const, penalty, band };
   });
 }
@@ -170,10 +170,10 @@ export async function recordOutcome(deps: AppDeps, actor: { userId: string; role
     } });
     const eventType = outcome === 'PAID' ? 'RECOVERY' : outcome === 'NO_SHOW' ? 'NO_SHOW' : 'UNPAID';
     const delta = outcome === 'PAID' ? recover : outcome === 'NO_SHOW' ? -noShow : -unpaid;
-    const score = await applyCredit(deps, tx, { userId: source.playerId, bookingId, eventType, delta, actorId: actor.userId });
+    const score = await applyCredit(deps, tx, { userId: source.playerId, bookingId, eventType, delta, actorId: actor.userId, at: now });
     const [good, caution] = await Promise.all([deps.settings.get('tier_good'), deps.settings.get('tier_caution')]);
     const creditTier = score === 0 ? 'BLOCKED' as const : tierOf(score, { good, caution });
-    await tx.auditLog.create({ data: { createdAt: deps.clock.now(), actorId: actor.userId, action: 'BOOKING_OUTCOME', targetType: 'Booking', targetId: bookingId, newValue: { outcome, amount: received } } });
+    await tx.auditLog.create({ data: { createdAt: now, actorId: actor.userId, action: 'BOOKING_OUTCOME', targetType: 'Booking', targetId: bookingId, newValue: { outcome, amount: received } } });
     return { ok: true as const, creditScore: score, creditTier };
   });
 }
@@ -191,7 +191,7 @@ export async function managerCancelBooking(deps: AppDeps, actor: { userId: strin
     if (!row || row.status !== 'CONFIRMED') throw new AppError('ALREADY_RECORDED', 'Only confirmed bookings can be cancelled');
     const now = deps.clock.now();
     await tx.booking.update({ where: { id: bookingId }, data: { status: 'CANCELLED', cancelledAt: now, cancelledById: actor.userId, cancelReason: reason } });
-    await tx.auditLog.create({ data: { createdAt: deps.clock.now(), actorId: actor.userId, action: 'VENUE_BOOKING_CANCELLED', targetType: 'Booking', targetId: bookingId, reason } });
+    await tx.auditLog.create({ data: { createdAt: now, actorId: actor.userId, action: 'VENUE_BOOKING_CANCELLED', targetType: 'Booking', targetId: bookingId, reason } });
     return { ok: true as const };
   });
 }

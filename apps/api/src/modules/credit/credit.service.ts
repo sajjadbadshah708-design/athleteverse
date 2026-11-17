@@ -10,8 +10,12 @@ export function boundedScore(score: number, delta: number): number {
   return Math.max(0, Math.min(100, score + delta));
 }
 
+/**
+ * `at` is the time of the booking change that causes this credit event; pass it so the change and its points carry one
+ * timestamp and the booking history lists them in cause-then-effect order (FR-5.3).
+ */
 export async function applyCredit(deps: AppDeps, tx: Tx, input: {
-  userId: string; bookingId: string; eventType: CreditEventType; delta: number; actorId?: string;
+  userId: string; bookingId: string; eventType: CreditEventType; delta: number; actorId?: string; at?: Date;
 }): Promise<number> {
   const prior = await tx.creditEvent.findUnique({
     where: { bookingId_eventType: { bookingId: input.bookingId, eventType: input.eventType } },
@@ -19,7 +23,7 @@ export async function applyCredit(deps: AppDeps, tx: Tx, input: {
   if (prior) throw new AppError('CREDIT_ALREADY_APPLIED', 'This credit change was already recorded');
   const user = await tx.user.findUniqueOrThrow({ where: { id: input.userId }, select: { creditScore: true, blockedAt: true } });
   const scoreAfter = boundedScore(user.creditScore, input.delta);
-  const now = deps.clock.now();
+  const now = input.at ?? deps.clock.now();
   await tx.creditEvent.create({ data: {
     userId: input.userId, bookingId: input.bookingId, eventType: input.eventType,
     points: scoreAfter - user.creditScore, scoreAfter, createdAt: now,
@@ -28,7 +32,7 @@ export async function applyCredit(deps: AppDeps, tx: Tx, input: {
     creditScore: scoreAfter,
     blockedAt: scoreAfter === 0 ? (user.blockedAt ?? now) : null,
   } });
-  await tx.auditLog.create({ data: { createdAt: deps.clock.now(),
+  await tx.auditLog.create({ data: { createdAt: now,
     actorId: input.actorId ?? input.userId, action: `CREDIT_${input.eventType}`,
     targetType: 'Booking', targetId: input.bookingId,
     oldValue: { score: user.creditScore }, newValue: { score: scoreAfter, delta: scoreAfter - user.creditScore },

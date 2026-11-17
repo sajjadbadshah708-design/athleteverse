@@ -126,7 +126,7 @@
   .av-score-track { background: #dfe9ec; height: 11px; border-radius: 999px; overflow: hidden; }
   .av-score-fill { height: 100%; background: linear-gradient(90deg, #0c6770, #49a281); border-radius: inherit; }
   .av-credit-ring { width: 150px; height: 150px; display: grid; place-items: center; border: 14px solid #d3f0e6; border-radius: 50%; background: #fff; color: #115c61; box-shadow: 0 6px 28px -12px #073e4a52; }
-  .av-link { display: inline-flex; min-height: 42px; align-items: center; gap: 6px; font-weight: 750; color: #0c5966; text-decoration: none; }
+  .av-link { display: inline-flex; min-height: 44px; align-items: center; /* USA-2: touch targets of at least 44 px */ gap: 6px; font-weight: 750; color: #0c5966; text-decoration: none; }
   .av-link:hover { text-decoration: underline; }
   .av-prose { line-height: 1.75; color: #526a7d; }
   .av-section-header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 19px; }

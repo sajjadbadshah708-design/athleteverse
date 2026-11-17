@@ -424,6 +424,20 @@ describe('booking detail with status history (FR-5.3)', () => {
     expect(body.history[2]).toMatchObject({ amount: '20.00', by: { role: 'MANAGER' } });
   });
 
+  it('lists a status change before the points it caused, even when the clock moves between writes (real clock)', async () => {
+    const id = await createBooking();
+    // Like the system clock, this one moves forward on every call, so writes inside one transaction get different times.
+    let t = Date.parse(minutes(70));
+    const ticking = testDeps({ prisma }, {});
+    ticking.deps.clock = { now: () => new Date(t++) };
+    const live = createApp(ticking.deps);
+    const agent = browser(live);
+    expect((await agent.post('/api/v1/auth/login').send({ email: managerEmail, password: PASSWORD })).status).toBe(200);
+    expect((await agent.post(`/api/v1/operations/bookings/${id}/outcome`).send({ outcome: 'NO_SHOW' })).status).toBe(200);
+    const body = (await agent.get(`/api/v1/operations/bookings/${id}`)).body;
+    expect(events(body)).toEqual(['CREATED', 'NO_SHOW', 'CREDIT']);
+  });
+
   it('is refused for another venue (403, logged), unknown bookings (404) and players', async () => {
     const id = await createBooking();
     const stranger = await createUser(prisma, { role: 'MANAGER' });

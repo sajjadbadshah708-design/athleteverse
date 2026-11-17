@@ -5,7 +5,7 @@
 | Source of truth | *AthleteVerse SRS Version 2.0* (41 pages; the cover still says "Version 1.0", the page headers and "Replaces Version 1.0" confirm 2.0) |
 | Approved scope | `docs/MVP_SCOPE_MATRIX.csv`: 128 FRs = **26 Yes + 23 Yes† = 49 MVP**, 76 Later, 3 No (FR-1.25, FR-2.14, FR-4.20) |
 | Scope decision | 2026-11-17, project owner: **keep the approved scope**. Teams, Matches and Tournaments (F3, F4) stay Later. "Messages" is out of scope (SRS §1.2: no in-app chat in v2.0). |
-| Evidence date | 2026-11-17, local run on PostgreSQL 15 (Docker), Node v24.18.0. Stage 1: API 386, web 191, shared 36. Stage 2: API 407, web 203, shared 36 tests pass |
+| Evidence date | 2026-11-17, local run on PostgreSQL 15 (Docker), Node v24.18.0. Stage 1: API 386, web 191, shared 36. Stage 2: API 408, web 203, shared 36 tests pass. Browser check 2026-11-17 (manager, staff, Super Admin; 1280 and 375 px) |
 
 Status words used below: **Verified** = behaviour exercised by a passing automated test; **Implemented, untested** = code exists, no test exercises it; **Partial** = only part of the approved (Yes†) slice exists; **Gap** = approved but missing.
 
@@ -131,6 +131,9 @@ Enforced on the server per request (role, account status, venue ownership): FR-1
 | D3 | Defect — **fixed in Stage 2** | Staff saw "Confirm cash paid" on automatically closed bookings, which the API refuses to staff. The button now shows for the manager only. | Table 15, rule "every button works" |
 | D4 | Defect — **fixed in Stage 2** | The front-desk search passed `%` and `_` to SQL LIKE as wildcards, so "%" matched every booking. The venue search's escaping moved to `lib/search.ts` and is used by all searches. | FR-5.3 |
 | D5 | Defect — **fixed in Stage 2** | Audit-log rows took their time from the database clock while every other timestamp used the injected clock (README rule), which mis-ordered history and bypassed test time. All audit writes now use the injected clock; the auto-close job now audits each closure. | FR-5.14, FR-5.3 |
+| D6 | Defect — **fixed after the browser check** | With the real clock, a credit event was stamped a few milliseconds before the outcome that caused it, so the booking history listed "Credit change" before "Cash paid". The credit engine now takes the transaction's timestamp; a regression test uses a clock that advances on every call. | FR-5.3 |
+| D7 | Defect — **fixed after the browser check** | Text links (`.av-link`, e.g. "Open front desk") were 42 px tall, under the 44 px touch target. | USA-2 |
+| F1 | Finding — open, not new | At 375 px the top navigation is a horizontal scroller only 51 px wide holding 308 px of links, so a phone user sees about one link at a time. Pre-existing layout; candidate for a phone menu. | USA-2, Table 5 |
 
 ## 6. Ambiguities and conflicts (to confirm; not acted on)
 
