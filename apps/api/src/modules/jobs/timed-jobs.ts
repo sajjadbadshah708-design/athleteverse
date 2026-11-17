@@ -1,17 +1,30 @@
 import type { Job } from './tick';
 import { withTx, lockUser } from '../../db/tx';
 
-/** FR-2.18: 24 hours after a booking ends, unresolved outcomes close without penalty. */
+/**
+ * FR-2.18: 24 hours after a booking ends, unresolved outcomes close without penalty. Each closure is audited (by the
+ * system, no actor) in the same transaction, so the booking's status history (FR-5.3) has no gap.
+ */
 export const autoCloseBookings: Job = {
   name: 'auto_close_bookings',
   async run(deps) {
     const hours = await deps.settings.get('outcome_auto_close_hours');
-    const cutoff = new Date(deps.clock.now().getTime() - hours * 3600000);
-    const changed = await deps.prisma.booking.updateMany({
-      where: { status: 'CONFIRMED', endTime: { lte: cutoff } },
-      data: { status: 'COMPLETED' },
+    const now = deps.clock.now();
+    const cutoff = new Date(now.getTime() - hours * 3600000);
+    return withTx(deps.prisma, async tx => {
+      const closed = await tx.booking.updateManyAndReturn({
+        where: { status: 'CONFIRMED', endTime: { lte: cutoff } },
+        data: { status: 'COMPLETED' },
+        select: { id: true },
+      });
+      if (closed.length) {
+        await tx.auditLog.createMany({ data: closed.map(b => ({
+          createdAt: now, action: 'BOOKING_AUTO_CLOSED', targetType: 'Booking', targetId: b.id,
+          reason: `No outcome ${hours} hours after the end`, newValue: { status: 'COMPLETED', paymentStatus: 'PENDING' },
+        })) });
+      }
+      return closed.length;
     });
-    return changed.count;
   },
 };
 
@@ -31,7 +44,7 @@ export const restoreBlockedAccounts: Job = {
         const result = await tx.user.updateMany({ where: { id: row.id, creditScore: 0, blockedAt: { lte: deadline } }, data: { creditScore: restoredScore, blockedAt: null } });
         if (!result.count) return false;
         await tx.creditEvent.create({ data: { userId: row.id, eventType: 'AUTO_RESTORE', points: restoredScore, scoreAfter: restoredScore, createdAt: deps.clock.now() } });
-        await tx.auditLog.create({ data: { action: 'CREDIT_AUTO_RESTORE', targetType: 'User', targetId: row.id, reason: `${days}-day blocked period ended`, newValue: { creditScore: restoredScore } } });
+        await tx.auditLog.create({ data: { createdAt: deps.clock.now(), action: 'CREDIT_AUTO_RESTORE', targetType: 'User', targetId: row.id, reason: `${days}-day blocked period ended`, newValue: { creditScore: restoredScore } } });
         return true;
       });
       if (updated) affected++;

@@ -43,11 +43,15 @@ const OWN_DATA_ROUTES = new Set([
 // National ID: only the Super Admin may review an Arena Manager application (SA-4).
 // Staff e-mail: only the owning manager may administer their staff (FR-5.6).
 // Player phone: only staff/manager of the booking venue (SRS 4.4, FR-1.16).
+// Account contact details: only the Super Admin, who supervises every account (SA-4, FR-1.20).
 // e-mail remains hidden from other players and all public discovery endpoints.
 const AUTHORIZED_FIELDS: Record<string, { fields: readonly string[]; roles: readonly string[]; method: string }> = {
   '/admin/managers': { fields: ['email', 'nationalIdNo'], roles: ['ADMIN'], method: 'get' },
+  '/admin/accounts': { fields: ['email', 'phone'], roles: ['ADMIN'], method: 'get' },
   '/manager/venues/{venueId}/staff': { fields: ['email'], roles: ['MANAGER'], method: 'get' },
   '/operations/venues/{venueId}/bookings': { fields: ['phone'], roles: ['MANAGER', 'STAFF'], method: 'get' },
+  '/operations/bookings/{id}': { fields: ['phone'], roles: ['MANAGER', 'STAFF'], method: 'get' },
+  '/manager/home': { fields: ['phone'], roles: ['MANAGER'], method: 'get' },
 };
 const PROTECTED_PII = ['email', 'phone', 'nationalIdNo', 'national_id_no'];
 const openApiPath = (path: string) => path.replace(/:(\w+)/g, '{$1}');

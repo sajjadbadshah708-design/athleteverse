@@ -368,6 +368,185 @@ describe('My Bookings (FR-2.13)', () => {
   });
 });
 
+describe('booking detail with status history (FR-5.3)', () => {
+  const detail = async (agent: ReturnType<typeof browser>, id: string) => (await agent.get(`/api/v1/operations/bookings/${id}`));
+  const events = (body: { history: { event: string }[] }) => body.history.map(h => h.event);
+
+  it('shows the player badge and phone, then created, paid with the amount and who took it, and the credit points', async () => {
+    const id = await createBooking();
+    await prisma.user.update({ where: { id: playerId }, data: { creditScore: 60 } });
+    const staff = await createStaff();
+    clock.set(minutes(70));
+    const desk = await signIn(staff.email);
+    await desk.post(`/api/v1/operations/bookings/${id}/outcome`).send({ outcome: 'PAID', amount: '18.50' });
+    const response = await detail(desk, id);
+    expect(response.status).toBe(200);
+    const player = await prisma.user.findUniqueOrThrow({ where: { id: playerId } });
+    expect(response.body).toMatchObject({ status: 'COMPLETED', paymentStatus: 'PAID', amountReceived: '18.50', cancelReason: null,
+      player: { fullName: player.fullName, phone: player.phone, creditScore: 65, creditTier: 'CAUTION' } });
+    expect(response.body.history).toEqual([
+      expect.objectContaining({ event: 'CREATED', by: { name: player.fullName, role: 'PLAYER' } }),
+      expect.objectContaining({ event: 'PAID', by: { name: staff.fullName, role: 'STAFF' }, amount: '18.50', at: minutes(70) }),
+      expect.objectContaining({ event: 'CREDIT', by: null, reason: 'RECOVERY', points: 5 }),
+    ]);
+    expect(JSON.stringify(response.body)).not.toContain(player.email); // e-mail is never shown to other users (FR-1.16)
+  });
+
+  it('records a player cancellation and its penalty', async () => {
+    const id = await createBooking();
+    clock.set(minutes(-3 * 60));
+    await (await signIn(playerEmail)).post(`/api/v1/me/bookings/${id}/cancel`);
+    const body = (await detail(await signIn(managerEmail), id)).body;
+    expect(events(body)).toEqual(['CREATED', 'PLAYER_CANCELLED', 'CREDIT']);
+    expect(body.history[2]).toMatchObject({ reason: 'LATE_CANCEL', points: -10 });
+  });
+
+  it('records a venue cancellation with its reason and no credit entry', async () => {
+    const id = await createBooking();
+    const manager = await signIn(managerEmail);
+    await manager.post(`/api/v1/operations/bookings/${id}/cancel`).send({ reason: 'Lights broken' });
+    const body = (await detail(manager, id)).body;
+    expect(body.cancelReason).toBe('Lights broken');
+    expect(events(body)).toEqual(['CREATED', 'VENUE_CANCELLED']);
+    expect(body.history[1]).toMatchObject({ reason: 'Lights broken', by: { role: 'MANAGER' } });
+  });
+
+  it('shows the automatic closure by the system, then a later cash confirmation by the manager', async () => {
+    const id = await createBooking();
+    clock.set(minutes(60 + 24 * 60));
+    await request(app).post('/api/jobs/tick').set('X-Job-Secret', TEST_JOB_SECRET);
+    expect(await prisma.auditLog.count({ where: { action: 'BOOKING_AUTO_CLOSED', targetId: id, actorId: null } })).toBe(1);
+    const manager = await signIn(managerEmail);
+    await manager.post(`/api/v1/operations/bookings/${id}/outcome`).send({ outcome: 'PAID' });
+    const body = (await detail(manager, id)).body;
+    expect(events(body)).toEqual(['CREATED', 'AUTO_CLOSED', 'PAID', 'CREDIT']);
+    expect(body.history[1]).toMatchObject({ by: null, at: minutes(60 + 24 * 60) });
+    expect(body.history[2]).toMatchObject({ amount: '20.00', by: { role: 'MANAGER' } });
+  });
+
+  it('is refused for another venue (403, logged), unknown bookings (404) and players', async () => {
+    const id = await createBooking();
+    const stranger = await createUser(prisma, { role: 'MANAGER' });
+    expect((await detail(await signIn(stranger.email), id)).status).toBe(403);
+    expect((await detail(await signIn(managerEmail), '00000000-0000-4000-8000-000000000000')).status).toBe(404);
+    expect((await detail(await signIn(playerEmail), id)).status).toBe(403);
+  });
+});
+
+describe('manager home (FR-5.1)', () => {
+  // The fake clock starts at 2030-01-15 12:00 UTC (PLATFORM_TZ is UTC in tests), so "today" is 15 January.
+  let n = 0;
+  async function book(court: string, startIso: string, extra: Record<string, unknown> = {}) {
+    const start = new Date(startIso);
+    return (await prisma.booking.create({ data: { bookingCode: `MH${String(++n).padStart(6, '0')}`, courtId: court, playerId,
+      startTime: start, endTime: new Date(start.getTime() + 3600000), totalPrice: '20.00', ...extra } })).bookingCode;
+  }
+  const codes = (list: { code: string }[]) => list.map(b => b.code);
+
+  it("lists today's bookings by court (empty courts included) and the bookings needing an action", async () => {
+    const court2 = (await prisma.court.create({ data: { venueId, name: 'Court 2', sportId: (await prisma.sport.findFirstOrThrow()).id, priceRegular: '20.00' } })).id;
+    const started = await book(courtId, '2030-01-15T10:00:00.000Z'); // started, no outcome yet
+    const later = await book(courtId, '2030-01-15T14:00:00.000Z');
+    await book(courtId, '2030-01-15T16:00:00.000Z', { status: 'CANCELLED', cancelledAt: new Date('2030-01-14T00:00:00Z'), cancelledById: playerId });
+    await book(courtId, '2030-01-16T10:00:00.000Z'); // tomorrow
+    const closed = await book(courtId, '2030-01-10T10:00:00.000Z', { status: 'COMPLETED' }); // auto-closed 5 days ago
+    await book(courtId, '2030-01-07T10:00:00.000Z', { status: 'COMPLETED' }); // past the 7-day window
+    await book(courtId, '2030-01-11T10:00:00.000Z', { status: 'COMPLETED', paymentStatus: 'PAID', amountReceived: '20.00', handledAt: new Date('2030-01-11T11:00:00Z') });
+
+    const response = await (await signIn(managerEmail)).get('/api/v1/manager/home');
+    expect(response.status).toBe(200);
+    expect(response.body.date).toBe('2030-01-15');
+    expect(response.body.venues).toEqual([{ id: venueId, name: 'Operations Arena' }]);
+    expect(response.body.courts.map((c: { name: string; bookings: { code: string }[] }) => [c.name, codes(c.bookings)]))
+      .toEqual([['Court 1', [started, later]], ['Court 2', []]]);
+    expect(response.body.courts[1].id).toBe(court2);
+    expect(codes(response.body.needsOutcome)).toEqual([started]);
+    expect(codes(response.body.awaitingCash)).toEqual([closed]);
+    expect(response.body.needsOutcome[0].player).toMatchObject({ creditTier: 'GOOD' });
+  });
+
+  it("narrows to one of the manager's venues and refuses a venue of someone else", async () => {
+    const managerId = (await prisma.venue.findUniqueOrThrow({ where: { id: venueId } })).managerId;
+    const second = await prisma.venue.create({ data: { managerId, cityId: (await prisma.city.findFirstOrThrow()).id, name: 'Second Arena', address: 'B Lane', phone: '923007777777', openHour: 8, closeHour: 23 } });
+    const secondCourt = (await prisma.court.create({ data: { venueId: second.id, name: 'Main', sportId: (await prisma.sport.findFirstOrThrow()).id, priceRegular: '15.00' } })).id;
+    const there = await book(secondCourt, '2030-01-15T13:00:00.000Z');
+    const here = await book(courtId, '2030-01-15T15:00:00.000Z');
+    const manager = await signIn(managerEmail);
+    const all = (await manager.get('/api/v1/manager/home')).body;
+    expect(all.venues.map((v: { name: string }) => v.name)).toEqual(['Operations Arena', 'Second Arena']);
+    expect(all.courts.flatMap((c: { bookings: { code: string }[] }) => codes(c.bookings)).sort()).toEqual([there, here].sort());
+    const one = (await manager.get(`/api/v1/manager/home?venueId=${second.id}`)).body;
+    expect(one.courts.map((c: { venueName: string }) => c.venueName)).toEqual(['Second Arena']);
+    expect(one.courts[0].bookings.map((b: { code: string }) => b.code)).toEqual([there]);
+
+    const otherManager = await createUser(prisma, { role: 'MANAGER' });
+    const foreign = await prisma.venue.create({ data: { managerId: otherManager.id, cityId: (await prisma.city.findFirstOrThrow()).id, name: 'Foreign Arena', address: 'C Lane', phone: '923006666666', openHour: 8, closeHour: 23 } });
+    expect((await manager.get(`/api/v1/manager/home?venueId=${foreign.id}`)).status).toBe(403);
+  });
+
+  it('is for managers only', async () => {
+    const staff = await createStaff();
+    expect((await (await signIn(staff.email)).get('/api/v1/manager/home')).status).toBe(403);
+    expect((await (await signIn(playerEmail)).get('/api/v1/manager/home')).status).toBe(403);
+  });
+});
+
+describe('Super Admin accounts list (FR-1.20, FR-5.10)', () => {
+  async function adminAgent() {
+    const admin = await createUser(prisma, { role: 'ADMIN' });
+    const agent = browser(app);
+    expect((await agent.post('/api/v1/auth/admin/request-otp').send({ email: admin.email, password: PASSWORD })).status).toBe(200);
+    const code = mailer.lastCodeFor(admin.email);
+    expect((await agent.post('/api/v1/auth/admin/verify-otp').send({ email: admin.email, password: PASSWORD, code })).status).toBe(200);
+    return { agent, admin };
+  }
+  const list = async (agent: ReturnType<typeof browser>, query = '') => (await agent.get(`/api/v1/admin/accounts${query}`)).body;
+
+  it('lists every account with its role and status, shows credit for players and the venue for staff, and hides secrets', async () => {
+    const staff = await createStaff();
+    const { agent } = await adminAgent();
+    const body = await list(agent);
+    expect(body).toMatchObject({ page: 1, pageSize: 20, total: 4 }); // manager, player, staff, admin
+    const player = body.items.find((a: { id: string }) => a.id === playerId);
+    expect(player).toMatchObject({ role: 'PLAYER', status: 'ACTIVE', creditScore: 100, venueName: null, isOwner: false });
+    expect(body.items.find((a: { id: string }) => a.id === staff.id)).toMatchObject({ role: 'STAFF', venueName: 'Operations Arena', creditScore: null });
+    expect(JSON.stringify(body)).not.toMatch(/password|Hash|nationalId/i);
+  });
+
+  it('filters by role and status and searches name, e-mail and phone (wildcards are plain text)', async () => {
+    await createUser(prisma, { role: 'MANAGER', status: 'PENDING_APPROVAL', email: 'waiting.manager@example.com', phone: '923005550001' });
+    const { agent } = await adminAgent();
+    expect((await list(agent, '?role=MANAGER')).total).toBe(2);
+    const pending = await list(agent, '?role=MANAGER&status=PENDING_APPROVAL');
+    expect(pending.items.map((a: { email: string }) => a.email)).toEqual(['waiting.manager@example.com']);
+    expect((await list(agent, '?q=WAITING.manager')).total).toBe(1); // e-mail, any case
+    expect((await list(agent, '?q=5550001')).total).toBe(1); // phone
+    const player = await prisma.user.findUniqueOrThrow({ where: { id: playerId } });
+    expect((await list(agent, `?q=${encodeURIComponent(player.fullName.toLowerCase())}`)).items.map((a: { id: string }) => a.id)).toEqual([playerId]);
+    expect((await list(agent, '?q=%25')).total).toBe(0);
+    expect((await agent.get('/api/v1/admin/accounts?role=OWNER')).status).toBe(422);
+  });
+
+  it('pages 20 at a time and leaves out soft-deleted accounts', async () => {
+    for (let i = 0; i < 22; i++) await createUser(prisma);
+    await createUser(prisma, { email: 'gone@example.com' }).then(u => prisma.user.update({ where: { id: u.id }, data: { deletedAt: new Date('2030-01-01T00:00:00Z') } }));
+    const { agent } = await adminAgent();
+    const first = await list(agent, '?role=PLAYER');
+    expect(first.total).toBe(23); // fixture player + 22
+    expect(first.items).toHaveLength(20);
+    const second = await list(agent, '?role=PLAYER&page=2');
+    expect(second.items).toHaveLength(3);
+    const ids = new Set([...first.items, ...second.items].map((a: { id: string }) => a.id));
+    expect(ids.size).toBe(23); // no account twice, none missing
+    expect((await list(agent, '?q=gone@')).total).toBe(0);
+  });
+
+  it('is for the Super Admin only', async () => {
+    expect((await (await signIn(managerEmail)).get('/api/v1/admin/accounts')).status).toBe(403);
+    expect((await (await signIn(playerEmail)).get('/api/v1/admin/accounts')).status).toBe(403);
+  });
+});
+
 /** Inserts `count` one-hour past bookings, back to back from 1 January 2029, so a venue has a long history. */
 async function insertHistory(count: number) {
   const start = Date.parse('2029-01-01T00:00:00.000Z');
@@ -398,6 +577,16 @@ describe('front-desk booking list with a long venue history (D1, FR-5.3)', () =>
     const phone = (await prisma.user.findUniqueOrThrow({ where: { id: playerId } })).phone;
     const byPhone = await manager.get(`/api/v1/operations/venues/${venueId}/bookings?search=${phone}`);
     expect(byPhone.body.items.map((b: { id: string }) => b.id)).toContain(id);
+  });
+
+  it('treats % and _ in a search as plain characters, not wildcards', async () => {
+    await createBooking();
+    const manager = await signIn(managerEmail);
+    for (const wildcard of ['%', '_', '%%']) {
+      const response = await manager.get(`/api/v1/operations/venues/${venueId}/bookings?search=${encodeURIComponent(wildcard)}`);
+      expect(response.status).toBe(200);
+      expect(response.body.items, wildcard).toEqual([]);
+    }
   });
 
   it('keeps the date in the platform time zone: a booking just after local midnight belongs to the new day', async () => {

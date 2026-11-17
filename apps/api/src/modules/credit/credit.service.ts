@@ -28,7 +28,7 @@ export async function applyCredit(deps: AppDeps, tx: Tx, input: {
     creditScore: scoreAfter,
     blockedAt: scoreAfter === 0 ? (user.blockedAt ?? now) : null,
   } });
-  await tx.auditLog.create({ data: {
+  await tx.auditLog.create({ data: { createdAt: deps.clock.now(),
     actorId: input.actorId ?? input.userId, action: `CREDIT_${input.eventType}`,
     targetType: 'Booking', targetId: input.bookingId,
     oldValue: { score: user.creditScore }, newValue: { score: scoreAfter, delta: scoreAfter - user.creditScore },

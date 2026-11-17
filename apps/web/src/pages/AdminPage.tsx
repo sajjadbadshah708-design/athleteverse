@@ -8,6 +8,7 @@ import { Alert } from '../ui/Alert';
 import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { PageHeading } from '../ui/PageHeading';
+import { AdminAccounts } from './AdminAccounts';
 
 export function AdminPage() {
   useDocumentTitle('Super Admin');
@@ -40,5 +41,6 @@ export function AdminPage() {
         {m.status === 'PENDING_APPROVAL' && <><div className="av-divider"/><label className="block space-y-2 text-sm font-bold">Decision reason<textarea className="av-field min-h-26" maxLength={500} value={reasons[m.id] ?? ''} onChange={e => setReasons({ ...reasons, [m.id]: e.target.value })} placeholder="Document why you are approving or rejecting this application…" /></label><div className="flex flex-wrap gap-3"><Button disabled={busy !== null} onClick={() => void decide(m.id, 'APPROVE')}><Icon name="check" size={17}/>Approve</Button><Button variant="secondary" disabled={busy !== null} onClick={() => void decide(m.id, 'REJECT')}>Reject</Button></div></>}
       </article>)}</div>
     </section>}
+    <AdminAccounts />
   </div>;
 }

@@ -2,7 +2,7 @@
 import { z } from 'zod';
 import { bookingSchema } from './bookings';
 import { idSchema } from './common';
-import { TIERS } from '../enums';
+import { ROLES, TIERS } from '../enums';
 
 export const myBookingsResponseSchema = z.object({ items: z.array(bookingSchema) });
 export type MyBookingsResponse = z.infer<typeof myBookingsResponseSchema>;
@@ -26,3 +26,33 @@ export const bookingReceiptSchema = z.object({
   amountReceived: z.string(), paidAt: z.iso.datetime(), startsAt: z.iso.datetime(), endsAt: z.iso.datetime(),
 });
 export type BookingReceipt = z.infer<typeof bookingReceiptSchema>;
+
+/** FR-5.3: one entry of a booking's status history, as shown to the venue (derived from the audit log and credit ledger). */
+export const BOOKING_HISTORY_EVENTS = ['CREATED', 'PLAYER_CANCELLED', 'VENUE_CANCELLED', 'PAID', 'UNPAID', 'NO_SHOW', 'AUTO_CLOSED', 'CREDIT'] as const;
+export type BookingHistoryEvent = (typeof BOOKING_HISTORY_EVENTS)[number];
+export const bookingHistoryEntrySchema = z.object({
+  at: z.iso.datetime(),
+  event: z.enum(BOOKING_HISTORY_EVENTS),
+  by: z.object({ name: z.string(), role: z.enum(ROLES) }).nullable(), // null: the system (timed job)
+  reason: z.string().nullable(),
+  points: z.number().int().nullable(), // CREDIT entries: the change applied to the player's score
+  amount: z.string().nullable(), // PAID entries: the cash received
+});
+export type BookingHistoryEntry = z.infer<typeof bookingHistoryEntrySchema>;
+export const venueBookingDetailSchema = venueBookingSchema.extend({
+  amountReceived: z.string().nullable(),
+  cancelReason: z.string().nullable(),
+  history: z.array(bookingHistoryEntrySchema),
+});
+export type VenueBookingDetail = z.infer<typeof venueBookingDetailSchema>;
+
+/** FR-5.1 (MVP slice): the manager's day for one venue or all of them, and the bookings that need an action. */
+export const managerHomeQuerySchema = z.object({ venueId: idSchema.optional() });
+export const managerHomeSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // today in the platform time zone
+  venues: z.array(z.object({ id: idSchema, name: z.string() })),
+  courts: z.array(z.object({ id: idSchema, name: z.string(), venueName: z.string(), bookings: z.array(venueBookingSchema) })),
+  needsOutcome: z.array(venueBookingSchema), // started, still Confirmed: record Paid, Unpaid or No-Show
+  awaitingCash: z.array(venueBookingSchema), // closed automatically, cash can still be confirmed by the manager
+});
+export type ManagerHome = z.infer<typeof managerHomeSchema>;

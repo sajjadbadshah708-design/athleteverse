@@ -5,7 +5,7 @@
 | Source of truth | *AthleteVerse SRS Version 2.0* (41 pages; the cover still says "Version 1.0", the page headers and "Replaces Version 1.0" confirm 2.0) |
 | Approved scope | `docs/MVP_SCOPE_MATRIX.csv`: 128 FRs = **26 Yes + 23 Yes† = 49 MVP**, 76 Later, 3 No (FR-1.25, FR-2.14, FR-4.20) |
 | Scope decision | 2026-11-17, project owner: **keep the approved scope**. Teams, Matches and Tournaments (F3, F4) stay Later. "Messages" is out of scope (SRS §1.2: no in-app chat in v2.0). |
-| Evidence date | 2026-11-17, local run on PostgreSQL 15 (Docker), Node v24.18.0. Stage 1: API 386, web 191, shared 36 tests pass |
+| Evidence date | 2026-11-17, local run on PostgreSQL 15 (Docker), Node v24.18.0. Stage 1: API 386, web 191, shared 36. Stage 2: API 407, web 203, shared 36 tests pass |
 
 Status words used below: **Verified** = behaviour exercised by a passing automated test; **Implemented, untested** = code exists, no test exercises it; **Partial** = only part of the approved (Yes†) slice exists; **Gap** = approved but missing.
 
@@ -52,9 +52,9 @@ Enforced on the server per request (role, account status, venue ownership): FR-1
 | 1.15 | Yes† | Booking blocked until profile complete | `completeness.ts` | Verified (`bookings.test`, `completeness.test`) |
 | 1.16 | Yes† | Phone only to booking venue; never e-mail/DOB | `route.ts` response filter | Verified (`privacy.test`, `route.test`) |
 | 1.18 | Yes | Limits 3 venues / 10 courts / 5 staff | `management.service.ts` | Verified (`mvp-operations.test`, Stage 1) |
-| 1.20 | Yes† | Admin approve/reject only | `management.service.ts`, `AdminPage` | Verified (`mvp-operations.test`) |
+| 1.20 | Yes† | Admin approve/reject, account search and filter (suspend/delete Later) | `management.service.ts`, `AdminPage`, `AdminAccounts` | Verified (`mvp-operations.test`, web `adminAccounts.test`) |
 | 1.23 | Yes† | Reason + audit for approvals, rejections, cancellations | `auditLog.create` calls | Verified (`mvp-operations.test`: approval, manager cancellation) |
-| 1.24 | Yes† | Sessions recorded, 5-cap, **revoke**; device UI Later | `sessions.ts` | **Partial**: cap and per-client records verified (`auth.login.test`); no endpoint for a user to sign out their other sessions (**G1**) |
+| 1.24 | Yes† | Sessions recorded, 5-cap, **revoke**; device UI Later | `sessions.ts` | Verified: cap and per-client records (`auth.login.test`); list, sign out one or all others (`sessions.test`, Stage 2). No device screen (Later, as scoped) |
 ### F2 Venue discovery and court booking (22)
 | FR | Scope | Approved slice | Status / evidence |
 |---|---|---|---|
@@ -69,7 +69,7 @@ Enforced on the server per request (role, account status, venue ownership): FR-1
 | 2.11 | Yes | Tier limits 3/2/1/0; no player overlap | Verified (`bookings.test`) |
 | 2.13 | Yes | My Bookings Upcoming / Past / Cancelled | Verified (`mvp-operations.test`, web `myBookings.test`) |
 | 2.15 | Yes | No online payment; "pay cash" copy | Verified (`bookings.test`: confirmation mail) |
-| 2.16 | Yes | Record Paid / Unpaid / No-Show | Verified (`mvp-operations.test`: all three, staff and manager, cross-venue refusal) |
+| 2.16 | Yes | Record Paid (with amount) / Unpaid / No-Show | Verified (`mvp-operations.test`: all three, staff and manager, cross-venue refusal; web `operations.test`: amount entry, D2) |
 | 2.17 | Yes | Paid → Completed, +5 (cap 100), receipt | Verified (`mvp-operations.test`) |
 | 2.18 | Yes | Auto-close after 24 h, no penalty | Verified (`mvp-operations.test`: boundary, idempotent, 7-day manager confirmation) |
 | 2.20 | Yes | Cancellation preview shows rule and points | Verified (`mvp-operations.test`) |
@@ -84,11 +84,11 @@ Enforced on the server per request (role, account status, venue ownership): FR-1
 ### F5 Management dashboards (8)
 | FR | Scope | Approved slice | Status / evidence |
 |---|---|---|---|
-| 5.1 | Yes† | Manager home: today's bookings and open actions | **Gap G2**: no home view; only the operations list |
-| 5.3 | Yes† | List, search by code/name/phone, detail with status history from audit log | **Partial**: list and search verified, D1 fixed; no detail view (**G3**) |
+| 5.1 | Yes† | Manager home: today's bookings and open actions | Verified (`mvp-operations.test`, web `managerHome.test`, Stage 2): today by court, outcome missing, cash still to confirm; one or all venues |
+| 5.3 | Yes† | List, search by code/name/phone, detail with status history from audit log | Verified: list and search (D1 fixed), detail with status history and credit badge (`mvp-operations.test`, web `operations.test`, Stage 2) |
 | 5.6 | Yes† | Invite and disable staff (remove, log Later) | Invite verified; disable verified (`auth.session.test`) |
 | 5.8 | Yes† | Venue / court / price forms (preview Later) | Implemented (`ManagerPage`); court form untested |
-| 5.10 | Yes† | Accounts list and approvals | **Partial**: only the pending-manager list (**G4**) |
+| 5.10 | Yes† | Accounts list and approvals | Verified (Stage 2): search, role/status filter, 20 per page; Venues module Later |
 | 5.14 | Yes† | Append-only audit write path | Verified (`constraints.test`: UPDATE/DELETE refused) |
 | 5.15 | Yes† | E-mail for OTP and invitations (bell Later) | Verified (`mail.test`, `mailer.test`, `bookings.test`) |
 | 5.17 | Yes | Same rules on every client | By architecture: rules live only in the API; shared Zod package |
@@ -122,11 +122,15 @@ Enforced on the server per request (role, account status, venue ownership): FR-1
 | ID | Kind | Description | Requirement |
 |---|---|---|---|
 | **D1** | Defect — **fixed in Stage 1** | `venueBookings` read the 200 *earliest* bookings of a venue (`orderBy startTime asc, take 200`) and filters by date in memory afterwards. Once a venue has more than 200 bookings, today's and upcoming bookings disappeared from the operations list and search. Fix: the date filter runs in the database on the platform-time-zone day (`localDayRange`); open searches list newest first. Pagination (PERF-4: 20 per page) is still open and needs a small API contract addition. | FR-5.3, FR-2.16, PERF-4 |
-| G1 | Gap | No endpoint or screen for a user to see their sessions and sign out the others. | FR-1.24 (Yes†) |
-| G2 | Gap | No manager home with today's bookings and open actions (missing outcomes). | FR-5.1 (Yes†) |
-| G3 | Gap | No booking detail with status history and credit badge. | FR-5.3 (Yes†) |
-| G4 | Gap | Admin sees only pending managers; no account list with role/status filter. | FR-5.10 (Yes†) |
+| G1 | Gap — **closed in Stage 2** | Was: no endpoint or screen for a user to see their sessions and sign out the others. | FR-1.24 (Yes†) |
+| G2 | Gap — **closed in Stage 2** | Was: no manager home with today's bookings and open actions (missing outcomes). | FR-5.1 (Yes†) |
+| G3 | Gap — **closed in Stage 2** | Was: no booking detail with status history and credit badge. | FR-5.3 (Yes†) |
+| G4 | Gap — **closed in Stage 2** | Was: admin saw only pending managers; no account list with role/status filter. | FR-5.10 (Yes†) |
 | T1 | Test gap — **closed in Stage 1** | Previously no tests for: auto-close job, blocked-restore job, −20 last-minute, −50 Unpaid, manager cancel, venue/court/staff limits, My Bookings tabs. | FR-2.13, 2.16, 2.18, 2.21, 2.22, 2.28, 1.18 |
+| D2 | Defect — **fixed in Stage 2** | The front desk could not enter the cash amount; Paid always recorded the booked price. Now an inline form takes the amount received, defaulting to the booked price (Table 15 step 4). | FR-2.16 |
+| D3 | Defect — **fixed in Stage 2** | Staff saw "Confirm cash paid" on automatically closed bookings, which the API refuses to staff. The button now shows for the manager only. | Table 15, rule "every button works" |
+| D4 | Defect — **fixed in Stage 2** | The front-desk search passed `%` and `_` to SQL LIKE as wildcards, so "%" matched every booking. The venue search's escaping moved to `lib/search.ts` and is used by all searches. | FR-5.3 |
+| D5 | Defect — **fixed in Stage 2** | Audit-log rows took their time from the database clock while every other timestamp used the injected clock (README rule), which mis-ordered history and bypassed test time. All audit writes now use the injected clock; the auto-close job now audits each closure. | FR-5.14, FR-5.3 |
 
 ## 6. Ambiguities and conflicts (to confirm; not acted on)
 

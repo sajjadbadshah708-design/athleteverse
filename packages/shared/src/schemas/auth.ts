@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ROLES, USER_STATUSES } from '../enums';
+import { CLIENTS, ROLES, USER_STATUSES } from '../enums';
 
 // Field rules are written once and used by the API and by both clients (SRS 3.1, FR-1.4, Table 10).
 
@@ -63,3 +63,17 @@ export type AuthUser = z.infer<typeof authUserSchema>;
 
 export const authResponseSchema = z.object({ user: authUserSchema });
 export const okResponseSchema = z.object({ ok: z.literal(true) });
+
+/** FR-1.24: one signed-in browser or phone of the user. `current` marks the session making the request. */
+export const sessionSchema = z.object({
+  id: z.uuid(),
+  client: z.enum(CLIENTS),
+  deviceName: z.string().nullable(),
+  appVersion: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  lastUsedAt: z.iso.datetime(),
+  current: z.boolean(),
+});
+export type Session = z.infer<typeof sessionSchema>;
+export const sessionsResponseSchema = z.object({ items: z.array(sessionSchema) });
+export const revokedSessionsSchema = z.object({ ok: z.literal(true), revoked: z.number().int().min(0) });

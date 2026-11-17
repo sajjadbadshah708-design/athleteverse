@@ -17,12 +17,10 @@ import type { Tx } from '../../db/tx';
 import type { AppDeps } from '../../lib/deps';
 import { notFound, validationError } from '../../lib/errors';
 import { addDays, localDateIn } from '../../lib/time';
+import { escapeLike } from '../../lib/search';
 import { daySlots, type DaySlot } from './slots';
 
 const money = (value: Prisma.Decimal): string => value.toFixed(2);
-
-/** Prisma's `contains` hands % and _ to LIKE as wildcards, so a search for "%" would match every venue. Escape them (and the escape character). */
-const escapeLike = (text: string): string => text.replace(/[\\%_]/g, '\\$&');
 
 // ---------- list ----------
 

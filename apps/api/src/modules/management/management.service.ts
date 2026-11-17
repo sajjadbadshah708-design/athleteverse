@@ -11,7 +11,9 @@ import { sendSafely } from '../../lib/mailer/mailer';
 import { otpMessage } from '../../lib/mailer/templates';
 import type { AppDeps } from '../../lib/deps';
 import { AppError, forbidden, notFound } from '../../lib/errors';
-import type { ManagerRegister } from '@athleteverse/shared';
+import { PAGE_SIZE, type AccountListQuery, type ManagerRegister } from '@athleteverse/shared';
+import type { Prisma } from '@prisma/client';
+import { escapeLike } from '../../lib/search';
 
 const denied = () => new AppError('INVALID_CREDENTIALS', 'E-mail or password is not correct');
 const INVITE_MS = 48 * 3600000;
@@ -44,6 +46,34 @@ export async function listManagers(deps: AppDeps) {
   })) };
 }
 
+/**
+ * FR-1.20 / FR-5.10 (MVP slice): every account except soft-deleted ones, newest first, 20 per page (PERF-4).
+ * Search matches name, e-mail or phone. Read-only: suspension and deletion are Later.
+ */
+export async function listAccounts(deps: AppDeps, query: AccountListQuery) {
+  const term = query.q ? escapeLike(query.q) : undefined;
+  const where: Prisma.UserWhereInput = {
+    deletedAt: null,
+    ...(query.role && { role: query.role }),
+    ...(query.status && { status: query.status }),
+    ...(term && { OR: [
+      { fullName: { contains: term, mode: 'insensitive' } },
+      { email: { contains: term.toLowerCase() } },
+      { phone: { contains: term } },
+    ] }),
+  };
+  const [total, rows] = await Promise.all([
+    deps.prisma.user.count({ where }),
+    deps.prisma.user.findMany({ where, include: { staffProfile: { include: { venue: { select: { name: true } } } } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }], skip: (query.page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
+  ]);
+  return {
+    items: rows.map(u => ({ id: u.id, fullName: u.fullName, email: u.email, phone: u.phone, role: u.role, status: u.status, isOwner: u.isOwner,
+      createdAt: u.createdAt.toISOString(), creditScore: u.role === 'PLAYER' ? u.creditScore : null, venueName: u.staffProfile?.venue.name ?? null })),
+    page: query.page, pageSize: PAGE_SIZE, total,
+  };
+}
+
 export async function decideManager(deps: AppDeps, adminId: string, managerId: string, decision: 'APPROVE' | 'REJECT', reason: string) {
   return withTx(deps.prisma, async tx => {
     await lockUser(tx, managerId);
@@ -55,7 +85,7 @@ export async function decideManager(deps: AppDeps, adminId: string, managerId: s
     await tx.managerProfile.update({ where: { userId: managerId }, data: {
       reviewedById: adminId, reviewedAt: deps.clock.now(), rejectionReason: decision === 'REJECT' ? reason : null,
     } });
-    await tx.auditLog.create({ data: { actorId: adminId, action: `MANAGER_${decision}`, targetType: 'User', targetId: managerId, reason,
+    await tx.auditLog.create({ data: { createdAt: deps.clock.now(), actorId: adminId, action: `MANAGER_${decision}`, targetType: 'User', targetId: managerId, reason,
       oldValue: { status: u.status }, newValue: { status } } });
     return { ok: true as const };
   });
@@ -143,7 +173,7 @@ export async function createVenue(deps: AppDeps, managerId: string, input: {
     const v = await tx.venue.create({ data: {
       ...input, managerId, description: input.description ?? null, peakStartHour: input.peakStartHour ?? null, peakEndHour: input.peakEndHour ?? null,
     } });
-    await tx.auditLog.create({ data: { actorId: managerId, action: 'VENUE_CREATED', targetType: 'Venue', targetId: v.id } });
+    await tx.auditLog.create({ data: { createdAt: deps.clock.now(), actorId: managerId, action: 'VENUE_CREATED', targetType: 'Venue', targetId: v.id } });
     return { id: v.id, name: v.name, address: v.address, cityId: v.cityId, openHour: v.openHour, closeHour: v.closeHour, status: v.status };
   });
 }
@@ -159,7 +189,7 @@ export async function createCourt(deps: AppDeps, managerId: string, venueId: str
     if (await tx.court.findFirst({ where: { venueId, name: { equals: input.name, mode: 'insensitive' } } })) throw new AppError('CONFLICT', 'Court name already used in this venue');
     if (!await tx.sport.findFirst({ where: { id: input.sportId, isActive: true } })) throw new AppError('VALIDATION_ERROR', 'Choose an active sport');
     const c = await tx.court.create({ data: { name: input.name, venueId, sportId: input.sportId, priceRegular: input.priceRegular, pricePeak: input.pricePeak ?? null } });
-    await tx.auditLog.create({ data: { actorId: managerId, action: 'COURT_CREATED', targetType: 'Court', targetId: c.id } });
+    await tx.auditLog.create({ data: { createdAt: deps.clock.now(), actorId: managerId, action: 'COURT_CREATED', targetType: 'Court', targetId: c.id } });
     return { id: c.id, name: c.name, sportId: c.sportId, priceRegular: c.priceRegular.toFixed(2), pricePeak: c.pricePeak?.toFixed(2) ?? null };
   });
 }
@@ -174,7 +204,7 @@ export async function inviteStaff(deps: AppDeps, managerId: string, venueId: str
     const user = await tx.user.create({ data: { ...input, status: 'UNVERIFIED', role: 'STAFF', emailVerified: false, createdAt: now } });
     await tx.staffProfile.create({ data: { userId: user.id, venueId, invitedById: managerId } });
     await tx.authToken.create({ data: { userId: user.id, purpose: 'STAFF_INVITE', tokenHash: hashOtp(deps.env.OTP_PEPPER, user.id, 'STAFF_INVITE', token), expiresAt: new Date(now.getTime() + INVITE_MS), createdAt: now } });
-    await tx.auditLog.create({ data: { actorId: managerId, action: 'STAFF_INVITED', targetType: 'User', targetId: user.id, reason: `Venue ${venueId}` } });
+    await tx.auditLog.create({ data: { createdAt: deps.clock.now(), actorId: managerId, action: 'STAFF_INVITED', targetType: 'User', targetId: user.id, reason: `Venue ${venueId}` } });
     return user.id;
   });
   const link = `${deps.env.WEB_BASE_URL.replace(/\/$/, '')}/accept-invite?userId=${encodeURIComponent(userId)}&token=${encodeURIComponent(token)}`;
@@ -214,7 +244,7 @@ export async function setStaffDisabled(deps: AppDeps, managerId: string, staffId
     await lockUser(tx, staffId);
     await tx.staffProfile.update({ where: { userId: staffId }, data: { disabledAt: disabled ? now : null } });
     if (disabled) await tx.userSession.updateMany({ where: { userId: staffId, revokedAt: null }, data: { revokedAt: now } });
-    await tx.auditLog.create({ data: { actorId: managerId, action: disabled ? 'STAFF_DISABLED' : 'STAFF_ENABLED', targetType: 'User', targetId: staffId, reason: 'Manager action' } });
+    await tx.auditLog.create({ data: { createdAt: deps.clock.now(), actorId: managerId, action: disabled ? 'STAFF_DISABLED' : 'STAFF_ENABLED', targetType: 'User', targetId: staffId, reason: 'Manager action' } });
   });
   return { ok: true as const };
 }

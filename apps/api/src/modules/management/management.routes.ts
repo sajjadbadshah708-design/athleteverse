@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import {
-  acceptInviteSchema, adminOtpRequestSchema, adminOtpResponseSchema, adminOtpVerifySchema,
+  acceptInviteSchema, accountListQuerySchema, accountsPageSchema, adminOtpRequestSchema, adminOtpResponseSchema, adminOtpVerifySchema,
   authResponseSchema, courtCreatedSchema, courtInputSchema, decisionSchema, idSchema, inviteResultSchema,
   managedVenuesSchema, managedVenueSchema, managerRegisterSchema, managersListSchema, myManagerStatusSchema, okResponseSchema,
   registerResponseSchema, staffInviteSchema, staffListSchema, venueInputSchema,
@@ -11,7 +11,7 @@ import { setAccessCookie, setRefreshCookie } from '../auth/cookies';
 import { sessionMeta } from '../auth/sessions';
 import {
   acceptStaffInvite, adminRequestOtp, adminVerifyOtp, createCourt, createVenue, decideManager, inviteStaff,
-  listManagers, managerVenues, registerManager, setStaffDisabled, staffList,
+  listAccounts, listManagers, managerVenues, registerManager, setStaffDisabled, staffList,
 } from './management.service';
 
 const venueIdParams = z.object({ venueId: idSchema });
@@ -38,6 +38,9 @@ export const MANAGEMENT_ROUTES = [
     tags: ['auth'], srs: ['FR-1.6'], access: 'public', middleware: [limit('verify')],
     body: acceptInviteSchema, response: okResponseSchema,
     handler: ({ deps, body }) => acceptStaffInvite(deps, body.userId, body.token, body.password) }),
+  defineRoute({ method: 'get', path: '/admin/accounts', summary: 'Search and filter all accounts (read-only in the MVP)', tags: ['admin'],
+    srs: ['FR-1.20', 'FR-5.10'], access: { roles: ['ADMIN'] }, query: accountListQuerySchema, response: accountsPageSchema,
+    handler: ({ deps, query }) => listAccounts(deps, query) }),
   defineRoute({ method: 'get', path: '/admin/managers', summary: 'Review manager account applications', tags: ['admin'],
     srs: ['FR-1.20'], access: { roles: ['ADMIN'] }, response: managersListSchema,
     handler: ({ deps }) => listManagers(deps) }),

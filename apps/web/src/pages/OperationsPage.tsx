@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { type ManagedVenue, type VenueBookingsResponse } from '@athleteverse/shared';
+import { useId, useState } from 'react';
+import { formatAmount, STRINGS, type ManagedVenue, type VenueBooking, type VenueBookingDetail, type VenueBookingsResponse } from '@athleteverse/shared';
 import { useAuth } from '../auth/AuthProvider';
 import { useApi } from '../api/ApiContext';
 import { useApiData } from '../api/useApiData';
@@ -10,10 +10,50 @@ import { Icon } from '../ui/Icon';
 import { PageHeading } from '../ui/PageHeading';
 import { useDocumentTitle } from '../useDocumentTitle';
 
+const t = STRINGS.operations;
+
+/** FR-5.3: the booking's status history, loaded when the operator opens it (remounted after an outcome to reload). */
+function BookingDetailPanel({ id, code }: { id: string; code: string }) {
+  const { loaded } = useApiData<VenueBookingDetail>(`/operations/bookings/${id}`);
+  return <section className="av-surface-soft space-y-3 p-4" aria-label={t.detailsTitle(code)}>
+    <h3 className="text-sm font-extrabold">{t.history}</h3>
+    {loaded.status === 'loading' && <p role="status" className="text-sm">{t.loadingDetails}</p>}
+    {loaded.status === 'error' && <Alert tone="error">{describeError(loaded.error)}</Alert>}
+    {loaded.status === 'ready' && <>
+      {loaded.data.cancelReason && <p className="text-sm"><strong>Cancellation reason:</strong> {loaded.data.cancelReason}</p>}
+      <ol className="space-y-2 text-sm">{loaded.data.history.map((h, i) => <li key={i} className="flex flex-wrap gap-x-2">
+        <time dateTime={h.at} className="font-mono text-xs text-ink-muted">{new Date(h.at).toLocaleString()}</time>
+        <span className="font-bold">{t.historyEvents[h.event]}</span>
+        {h.points !== null && <span>({h.points > 0 ? `+${h.points}` : h.points} points)</span>}
+        {h.amount !== null && <span>{formatAmount(h.amount)}</span>}
+        <span className="text-ink-muted">— {h.by ? `${h.by.name} (${h.by.role.toLowerCase()})` : t.system}</span>
+        {h.reason && h.event !== 'CREDIT' && <span className="w-full text-ink-muted">{h.reason}</span>}
+      </li>)}</ol>
+    </>}
+  </section>;
+}
+
+/** Table 15 step 4: the operator enters the cash received; the booked price is the default. */
+function PaidForm({ booking, busy, onSubmit, onCancel }: { booking: VenueBooking; busy: boolean; onSubmit: (amount: string) => void; onCancel: () => void }) {
+  const [amount, setAmount] = useState(booking.totalPrice);
+  const fieldId = useId();
+  const valid = /^\d{1,8}(\.\d{1,2})?$/.test(amount) && Number(amount) > 0;
+  return <form className="space-y-3 rounded-2xl border border-[#b1cacf] p-4" aria-label={t.confirmPaid}
+    onSubmit={e => { e.preventDefault(); if (valid) onSubmit(amount); }}>
+    <label htmlFor={fieldId} className="block text-sm font-bold">{t.amountReceived}</label>
+    <input id={fieldId} className="av-field" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value.trim())}
+      aria-invalid={!valid} aria-describedby={`${fieldId}-hint`} />
+    <p id={`${fieldId}-hint`} className="text-xs text-ink-muted">{t.amountHint}</p>
+    <div className="flex flex-wrap gap-2"><Button type="submit" disabled={!valid || busy}>{t.savePaid}</Button><Button type="button" variant="secondary" onClick={onCancel}>{t.keep}</Button></div>
+  </form>;
+}
+
 function BookingDesk({ venueId, isManager }: { venueId: string; isManager: boolean }) {
   const api = useApi();
   const [search, setSearch] = useState(''); const [date, setDate] = useState('');
   const [busy, setBusy] = useState<string | null>(null); const [message, setMessage] = useState<string | null>(null);
+  const [openDetail, setOpenDetail] = useState<string | null>(null); const [paying, setPaying] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
   const url = `/operations/venues/${venueId}/bookings?${new URLSearchParams({ ...(search && { search }), ...(date && { date }) }).toString()}`;
   const { loaded, refresh } = useApiData<VenueBookingsResponse>(url);
   async function cancelByVenue(id: string) {
@@ -24,10 +64,14 @@ function BookingDesk({ venueId, isManager }: { venueId: string; isManager: boole
     catch (error) { setMessage(describeError(error)); refresh(); }
     finally { setBusy(null); }
   }
-  async function record(id: string, outcome: 'PAID' | 'UNPAID' | 'NO_SHOW') {
-    if (!window.confirm(`Confirm ${outcome.replace('_', ' ').toLowerCase()} for this booking? This changes the player's credit score.`)) return;
+  async function record(id: string, outcome: 'PAID' | 'UNPAID' | 'NO_SHOW', amount?: string) {
+    if (outcome !== 'PAID' && !window.confirm(`Confirm ${outcome.replace('_', ' ').toLowerCase()} for this booking? This changes the player's credit score.`)) return;
     setBusy(id); setMessage(null);
-    try { await api.post(`/operations/bookings/${id}/outcome`, { outcome }); setMessage(`${outcome} recorded successfully.`); refresh(); }
+    try {
+      await api.post(`/operations/bookings/${id}/outcome`, { outcome, ...(amount && { amount }) });
+      setMessage(outcome === 'PAID' && amount ? t.paidRecorded(formatAmount(amount)) : `${outcome} recorded successfully.`);
+      setPaying(null); setVersion(v => v + 1); refresh();
+    }
     catch (error) { setMessage(describeError(error)); refresh(); }
     finally { setBusy(null); }
   }
@@ -50,9 +94,13 @@ function BookingDesk({ venueId, isManager }: { venueId: string; isManager: boole
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3"><div className="av-surface-soft p-3"><p className="av-stat-label">Booking price</p><p className="mt-1 font-extrabold">{b.totalPrice}</p></div><div className="av-surface-soft p-3"><p className="av-stat-label">Credit standing</p><p className="mt-1 font-extrabold">{b.player.creditScore} <span className="text-xs font-semibold text-ink-muted">({b.player.creditTier})</span></p></div><div className="av-surface-soft col-span-2 p-3 sm:col-span-1"><p className="av-stat-label">Cash status</p><p className="mt-1 font-extrabold">{b.paymentStatus}</p></div></div>
         <p className="flex items-center gap-2 text-sm text-ink-muted"><Icon name="phone" size={16}/> {b.player.phone}</p><div className="av-divider"/>
         {isManager && b.status === 'CONFIRMED' && <Button variant="secondary" disabled={busy !== null} onClick={() => void cancelByVenue(b.id)}>Cancel booking (no penalty)</Button>}
-        {(b.status === 'CONFIRMED' || (b.status === 'COMPLETED' && b.paymentStatus === 'PENDING')) && <div className="flex flex-wrap gap-2"><Button disabled={busy !== null} onClick={() => void record(b.id, 'PAID')}><Icon name="check" size={16}/> Confirm cash paid</Button>
+        {/* After automatic closure only the manager may still confirm cash (Table 15); staff see no button the API would refuse. */}
+        {(b.status === 'CONFIRMED' || (isManager && b.status === 'COMPLETED' && b.paymentStatus === 'PENDING')) && paying !== b.id && <div className="flex flex-wrap gap-2"><Button disabled={busy !== null} onClick={() => setPaying(b.id)}><Icon name="check" size={16}/> {t.confirmPaid}</Button>
           {b.status === 'CONFIRMED' && <><Button variant="secondary" disabled={busy !== null} onClick={() => void record(b.id, 'UNPAID')}>Record unpaid</Button><Button variant="secondary" disabled={busy !== null} onClick={() => void record(b.id, 'NO_SHOW')}>Record no-show</Button></>}
         </div>}
+        {paying === b.id && <PaidForm booking={b} busy={busy !== null} onSubmit={amount => void record(b.id, 'PAID', amount)} onCancel={() => setPaying(null)} />}
+        <Button variant="secondary" aria-expanded={openDetail === b.id} onClick={() => setOpenDetail(openDetail === b.id ? null : b.id)}>{openDetail === b.id ? t.hideDetails : t.details}</Button>
+        {openDetail === b.id && <BookingDetailPanel key={version} id={b.id} code={b.code} />}
       </article>)}</div>
     </>}
   </div>;

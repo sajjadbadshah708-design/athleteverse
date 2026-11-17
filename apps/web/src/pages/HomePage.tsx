@@ -6,6 +6,7 @@ import { Alert } from '../ui/Alert';
 import { Icon, type IconName } from '../ui/Icon';
 import { PageHeading } from '../ui/PageHeading';
 import { ManagerStatusNotice } from './ManagerStatusNotice';
+import { ManagerToday } from './ManagerToday';
 
 const t = STRINGS.home;
 type Shortcut = { to: string; title: string; description: string; icon: IconName; tag: string };
@@ -50,6 +51,7 @@ export function HomePage() {
     </section>
 
     {user.role === 'MANAGER' && <ManagerStatusNotice />}
+    {user.role === 'MANAGER' && user.status === 'ACTIVE' && <ManagerToday />}
     {user.role !== 'MANAGER' && user.status === 'PENDING_APPROVAL' && <Alert tone="warning">{t.pending}</Alert>}
     {user.role !== 'MANAGER' && user.status === 'REJECTED' && <Alert tone="error">{t.rejected}</Alert>}
     {justSaved && <Alert tone="info">{t.profileSaved}</Alert>}

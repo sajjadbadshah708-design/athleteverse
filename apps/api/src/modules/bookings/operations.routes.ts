@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { cancellationPreviewSchema, cancellationResultSchema, creditSummarySchema, idSchema, myBookingsResponseSchema,
-  outcomeRequestSchema, outcomeResultSchema, venueBookingsResponseSchema, okResponseSchema, bookingReceiptSchema } from '@athleteverse/shared';
+  managerHomeQuerySchema, managerHomeSchema, outcomeRequestSchema, outcomeResultSchema, venueBookingDetailSchema, venueBookingsResponseSchema, okResponseSchema, bookingReceiptSchema } from '@athleteverse/shared';
 import { defineRoute } from '../../lib/route';
 import { getCreditSummary } from '../credit/credit.service';
-import { cancellationPreview, cancelMyBooking, listMyBookings, managerCancelBooking, playerReceipt, recordOutcome, venueBookings } from './booking-actions';
+import { cancellationPreview, cancelMyBooking, listMyBookings, managerCancelBooking, managerHome, playerReceipt, recordOutcome, venueBookingDetail, venueBookings } from './booking-actions';
 
 const bookingParams = z.object({ id: idSchema });
 const venueParams = z.object({ venueId: idSchema });
@@ -29,6 +29,12 @@ export const OPERATIONS_ROUTES = [
     tags: ['operations'], srs: ['FR-5.3', 'FR-1.13'], access: { roles: ['MANAGER', 'STAFF'] }, params: venueParams,
     query: venueQuery, response: venueBookingsResponseSchema,
     handler: ({ deps, auth, params, query }) => venueBookings(deps, auth, params.venueId, query.date, query.search) }),
+  defineRoute({ method: 'get', path: '/manager/home', summary: "Manager home: today's bookings by court and bookings needing action",
+    tags: ['operations'], srs: ['FR-5.1', 'FR-1.13'], access: { roles: ['MANAGER'] }, query: managerHomeQuerySchema, response: managerHomeSchema,
+    handler: ({ deps, auth, query }) => managerHome(deps, auth.userId, query.venueId) }),
+  defineRoute({ method: 'get', path: '/operations/bookings/:id', summary: 'One venue booking with player badge and status history',
+    tags: ['operations'], srs: ['FR-5.3', 'FR-2.27', 'FR-1.13'], access: { roles: ['MANAGER', 'STAFF'] }, params: bookingParams,
+    response: venueBookingDetailSchema, handler: ({ deps, auth, params }) => venueBookingDetail(deps, auth, params.id) }),
   defineRoute({ method: 'post', path: '/operations/bookings/:id/cancel', summary: 'Manager cancellation with reason, no player penalty',
     tags: ['operations'], srs: ['FR-2.22', 'FR-1.13'], access: { roles: ['MANAGER'] }, params: bookingParams,
     body: z.object({ reason: z.string().trim().min(3).max(500) }), response: okResponseSchema,

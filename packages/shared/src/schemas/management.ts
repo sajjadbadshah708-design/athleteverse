@@ -1,7 +1,8 @@
 // SRS Tables 9-11, MVP F1/F5: manager onboarding and venue operations.
 import { z } from 'zod';
 import { emailSchema, fullNameSchema, passwordSchema, phoneSchema, registerRequestSchema } from './auth';
-import { idSchema } from './common';
+import { idSchema, pageOf } from './common';
+import { ROLES, USER_STATUSES } from '../enums';
 
 export const managerRegisterSchema = registerRequestSchema.extend({
   businessName: z.string().trim().min(3).max(80), nationalIdNo: z.string().trim().min(5).max(50),
@@ -43,3 +44,21 @@ export type StaffMember = z.infer<typeof staffListSchema>['items'][number];
 
 export const myManagerStatusSchema = z.object({ status: z.string(), rejectionReason: z.string().nullable(), businessName: z.string() });
 export type MyManagerStatus = z.infer<typeof myManagerStatusSchema>;
+
+/** FR-1.20 / FR-5.10 (MVP slice): the Super Admin's account list, searched by name, e-mail or phone and filtered by role and status. */
+export const accountListQuerySchema = z.object({
+  q: z.string().trim().max(80).optional(),
+  role: z.enum(ROLES).optional(),
+  status: z.enum(USER_STATUSES).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+});
+export type AccountListQuery = z.infer<typeof accountListQuerySchema>;
+export const accountSchema = z.object({
+  id: idSchema, fullName: z.string(), email: z.string(), phone: z.string(),
+  role: z.enum(ROLES), status: z.enum(USER_STATUSES), isOwner: z.boolean(), createdAt: z.iso.datetime(),
+  creditScore: z.number().int().nullable(), // players only
+  venueName: z.string().nullable(), // staff: their assigned venue
+});
+export type Account = z.infer<typeof accountSchema>;
+export const accountsPageSchema = pageOf(accountSchema);
+export type AccountsPage = z.infer<typeof accountsPageSchema>;
