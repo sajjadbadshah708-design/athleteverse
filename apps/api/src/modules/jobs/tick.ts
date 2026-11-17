@@ -6,6 +6,8 @@ import { autoCloseBookings, restoreBlockedAccounts, cleanupSessions } from './ti
 
 export interface Job {
   name: string;
+  /** True when the job queries the database: such jobs run at most every JOB_DB_INTERVAL_MINUTES (decision Q5). */
+  touchesDatabase?: boolean;
   /** Returns how many rows it changed. Must be safe to run twice. */
   run(deps: AppDeps): Promise<number>;
 }
@@ -15,7 +17,13 @@ export interface JobResult {
   ok: boolean;
   affected: number;
   ms: number;
+  skipped?: true; // a database job that ran less than JOB_DB_INTERVAL_MINUTES ago
   error?: string; // generic on purpose: details go to the server log, not to the caller
+}
+
+/** What the runner remembers between ticks, kept in memory per API process. A restart simply runs the jobs again (REL-3). */
+export interface TickState {
+  lastDatabaseRun?: number; // epoch ms
 }
 
 export interface TickResult {
@@ -26,10 +34,21 @@ export interface TickResult {
 
 export const ALL_JOBS: Job[] = [autoCloseBookings, restoreBlockedAccounts, cleanupSessions];
 
-/** Runs jobs one after another. One failing job never stops the others. */
-export async function runTick(deps: AppDeps, jobs: Job[] = ALL_JOBS): Promise<TickResult> {
+/**
+ * Runs jobs one after another. One failing job never stops the others. Jobs that touch the database are skipped while
+ * they ran less than JOB_DB_INTERVAL_MINUTES ago, so a tick that only keeps the API awake does not wake the database.
+ */
+export async function runTick(deps: AppDeps, jobs: Job[] = ALL_JOBS, state: TickState = {}): Promise<TickResult> {
+  const now = deps.clock.now().getTime();
+  const intervalMs = deps.env.JOB_DB_INTERVAL_MINUTES * 60_000;
+  const databaseDue = intervalMs === 0 || state.lastDatabaseRun === undefined || now - state.lastDatabaseRun >= intervalMs;
+  if (databaseDue && jobs.some((j) => j.touchesDatabase)) state.lastDatabaseRun = now;
   const results: JobResult[] = [];
   for (const job of jobs) {
+    if (job.touchesDatabase && !databaseDue) {
+      results.push({ name: job.name, ok: true, affected: 0, ms: 0, skipped: true });
+      continue;
+    }
     const started = performance.now();
     try {
       const affected = await job.run(deps);

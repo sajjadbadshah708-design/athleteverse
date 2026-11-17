@@ -25,6 +25,9 @@ const schema = z
     PLATFORM_TZ: timeZone.default('UTC'), // one platform time zone until OI-1 is answered (N4)
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0), // measured with spike S2 (docs/DEPLOY.md)
     JOB_SECRET: z.string().min(32, 'must be at least 32 characters').optional(), // header X-Job-Secret for POST /api/jobs/tick (SRS 3.4)
+    // Minimum minutes between runs of the jobs that query the database (decision Q5, docs/DEPLOY.md). The tick still comes
+    // every 10 minutes to keep the API awake; 30 here keeps the free Neon database asleep most of the time. 0 = every tick.
+    JOB_DB_INTERVAL_MINUTES: z.coerce.number().int().min(0).max(1440).default(0),
     ENABLE_SPIKES: z.stringbool().default(false), // temporary diagnostic endpoint (spike S2); keep false otherwise
     JWT_SECRET: z.string().min(32, 'must be at least 32 characters').optional(), // signs 15-minute access tokens (FR-1.8)
     OTP_PEPPER: z.string().min(32, 'must be at least 32 characters').optional(), // keys the HMAC of stored OTP codes
@@ -62,6 +65,7 @@ export interface Env {
   PLATFORM_TZ: string;
   TRUST_PROXY_HOPS: number;
   JOB_SECRET: string | undefined;
+  JOB_DB_INTERVAL_MINUTES: number;
   ENABLE_SPIKES: boolean;
   JWT_SECRET: string;
   OTP_PEPPER: string;
@@ -90,6 +94,7 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     PLATFORM_TZ: e.PLATFORM_TZ,
     TRUST_PROXY_HOPS: e.TRUST_PROXY_HOPS,
     JOB_SECRET: e.JOB_SECRET,
+    JOB_DB_INTERVAL_MINUTES: e.JOB_DB_INTERVAL_MINUTES,
     ENABLE_SPIKES: e.ENABLE_SPIKES,
     JWT_SECRET: e.JWT_SECRET ?? DEV_JWT_SECRET,
     OTP_PEPPER: e.OTP_PEPPER ?? DEV_OTP_PEPPER,

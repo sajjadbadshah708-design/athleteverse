@@ -48,6 +48,10 @@ describe('render.yaml', () => {
     }
   });
 
+  it('runs database jobs every 30 minutes so the free Neon quota lasts the month (decision Q5)', () => {
+    expect(env('JOB_DB_INTERVAL_MINUTES')?.value).toBe('30');
+  });
+
   it('starts in production mode with the spike endpoint off', () => {
     expect(env('NODE_ENV')?.value).toBe('production');
     expect(env('ENABLE_SPIKES')?.value).toBe('false');

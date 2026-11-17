@@ -7,6 +7,7 @@ import { withTx, lockUser } from '../../db/tx';
  */
 export const autoCloseBookings: Job = {
   name: 'auto_close_bookings',
+  touchesDatabase: true,
   async run(deps) {
     const hours = await deps.settings.get('outcome_auto_close_hours');
     const now = deps.clock.now();
@@ -34,6 +35,7 @@ export const autoCloseBookings: Job = {
  */
 export const restoreBlockedAccounts: Job = {
   name: 'restore_blocked_players',
+  touchesDatabase: true,
   async run(deps) {
     const [days, restoredScore] = await Promise.all([deps.settings.get('blocked_restore_days'), deps.settings.get('blocked_restore_score')]);
     const now = deps.clock.now();
@@ -60,6 +62,7 @@ export const restoreBlockedAccounts: Job = {
 
 export const cleanupSessions: Job = {
   name: 'cleanup_sessions',
+  touchesDatabase: true,
   async run(deps) {
     const now = deps.clock.now();
     const rows = await deps.prisma.userSession.deleteMany({ where: { OR: [{ expiresAt: { lt: now } }, { revokedAt: { not: null } }] } });

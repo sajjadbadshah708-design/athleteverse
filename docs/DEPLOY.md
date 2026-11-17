@@ -19,7 +19,7 @@ Everything in this repository is built and tested. The steps below need **your a
 
 1. **Region pair** for Render and Neon (F3).
 2. **Mail:** do you own a domain? If not, Brevo with a validated single sender is the only free route (F4).
-3. **Repository visibility:** a private repository avoids the 60-day schedule pause (F5) but check the Actions minutes of your GitHub plan (a tick takes well under a minute).
+3. **Repository visibility: public (decided 2026-11-17).** GitHub bills each private-repository job as at least one minute: the 10-minute tick alone is about 4,300 minutes a month, more than the 2,000 free minutes (3,000 with the Student Developer Pack), so a private repository's timer would stop mid-month. Public repositories have no Actions minute limit. The repository holds no secrets (`.env` is ignored; `.env.example` holds placeholders only). The cost is the 60-day pause on inactivity (F5).
 
 ## 2. Neon (database)
 
@@ -75,7 +75,7 @@ Everything in this repository is built and tested. The steps below need **your a
 
 **Why S2 matters more now.** T5 adds per-IP rate limits (register, e-mail code, sign-in). With `TRUST_PROXY_HOPS=0` every web user shares the proxy's address, so one bucket serves everybody; the per-e-mail limits and the five-failure account lock keep working, but the IP limits become useless or, worse, block real users. `server.ts` logs a warning in production while it is 0.
 
-**Decision Q5 for T17.** The tick will query the database once jobs exist. Neon stays awake 5 minutes after each query, so a query every 10 minutes keeps it awake about half the time: roughly 0.25 CU x 365 h, about 91 compute-hours, which leaves almost nothing for real traffic. Proposed: each job declares how often it needs to run, and the tick only runs DB-touching jobs that are due (for example every 30 minutes, about 30 compute-hours), while still being called every 10 minutes to keep the API awake. No SRS job needs 10-minute precision. S4 gives the real numbers.
+**Decision Q5: implemented 2026-11-17.** `JOB_DB_INTERVAL_MINUTES=30` in `render.yaml`: the tick still runs every 10 minutes (API stays awake) but the three database jobs run at most every 30 minutes; skipped jobs show `"skipped": true` and keep the workflow green. Confirm with S4. Original analysis: the tick queries the database once jobs exist. Neon stays awake 5 minutes after each query, so a query every 10 minutes keeps it awake about half the time: roughly 0.25 CU x 365 h, about 91 compute-hours, which leaves almost nothing for real traffic. Proposed: each job declares how often it needs to run, and the tick only runs DB-touching jobs that are due (for example every 30 minutes, about 30 compute-hours), while still being called every 10 minutes to keep the API awake. No SRS job needs 10-minute precision. S4 gives the real numbers.
 
 ## 7. After the spikes
 

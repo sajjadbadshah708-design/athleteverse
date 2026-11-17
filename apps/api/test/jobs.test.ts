@@ -76,6 +76,35 @@ describe('runTick', () => {
     expect(JSON.stringify(logs.find((l) => l.msg === 'job failed'))).toContain('exploded'); // detail stays in the server log
   });
 
+  it('runs database jobs at most every JOB_DB_INTERVAL_MINUTES, other jobs on every tick (decision Q5)', async () => {
+    const { deps, clock } = testDeps({}, { JOB_DB_INTERVAL_MINUTES: '30' });
+    const ran: string[] = [];
+    const jobs: Job[] = [
+      { name: 'db', touchesDatabase: true, run: async () => (ran.push('db'), 1) },
+      { name: 'memory', run: async () => (ran.push('memory'), 0) },
+    ];
+    const state = {};
+    const tickAt = async (iso: string) => { clock.set(iso); return runTick(deps, jobs, state); };
+    expect((await tickAt('2030-01-15T12:00:00.000Z')).jobs.map((j) => j.skipped ?? false)).toEqual([false, false]);
+    const skipped = await tickAt('2030-01-15T12:10:00.000Z');
+    expect(skipped.ok).toBe(true); // a skipped job is not a failure: the workflow stays green
+    expect(skipped.jobs[0]).toMatchObject({ name: 'db', ok: true, affected: 0, skipped: true });
+    await tickAt('2030-01-15T12:20:00.000Z');
+    await tickAt('2030-01-15T12:30:00.000Z'); // 30 minutes after the last database run: due again
+    expect(ran).toEqual(['db', 'memory', 'memory', 'memory', 'db', 'memory']);
+  });
+
+  it('runs every job on every tick when the interval is 0 (the default for development and tests)', async () => {
+    const { deps, clock } = testDeps();
+    let runs = 0;
+    const job: Job = { name: 'db', touchesDatabase: true, run: async () => (runs++, 0) };
+    const state = {};
+    await runTick(deps, [job], state);
+    clock.set('2030-01-15T12:01:00.000Z');
+    await runTick(deps, [job], state);
+    expect(runs).toBe(2);
+  });
+
   it('can run twice in a row (idempotent jobs make a repeated tick harmless, REL-3)', async () => {
     const { deps } = testDeps();
     let remaining = 2;

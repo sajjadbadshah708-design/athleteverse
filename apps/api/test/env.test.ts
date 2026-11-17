@@ -15,6 +15,7 @@ describe('loadEnv', () => {
       PLATFORM_TZ: 'UTC',
       TRUST_PROXY_HOPS: 0,
       JOB_SECRET: undefined,
+      JOB_DB_INTERVAL_MINUTES: 0,
       ENABLE_SPIKES: false,
       JWT_SECRET: expect.stringContaining('dev-only'),
       OTP_PEPPER: expect.stringContaining('dev-only'),

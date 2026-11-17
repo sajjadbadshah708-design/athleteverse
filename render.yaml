@@ -41,6 +41,8 @@ services:
         sync: false
       - key: WEB_BASE_URL        # public https address of the Vercel web app (staff invitation links); the API refuses to start without it
         sync: false
+      - key: JOB_DB_INTERVAL_MINUTES   # decision Q5: the 10-minute tick keeps the API awake, database jobs run every 30 minutes
+        value: "30"                    # so the free Neon database (100 compute-hours a month) can sleep in between
       - key: PLATFORM_TZ
         value: Asia/Karachi      # OI-1: launch in Pakistan (assumed 2026-11-17; +92 phone numbers). Change here if the launch city differs
       - key: TRUST_PROXY_HOPS
