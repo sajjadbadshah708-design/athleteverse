@@ -635,6 +635,27 @@ describe('front-desk booking list with a long venue history (D1, FR-5.3)', () =>
     expect(byPhone.body.items.map((b: { id: string }) => b.id)).toContain(id);
   });
 
+  it('pages 20 at a time in time order for a day, with the total (PERF-4)', async () => {
+    const court2 = (await prisma.court.create({ data: { venueId, name: 'Court 2', sportId: (await prisma.sport.findFirstOrThrow()).id, priceRegular: '20.00' } })).id;
+    const other = await createUser(prisma);
+    const rows = [
+      ...Array.from({ length: 13 }, (_, h) => ({ court: courtId, player: playerId, h })),
+      ...Array.from({ length: 12 }, (_, h) => ({ court: court2, player: other.id, h })),
+    ];
+    await prisma.booking.createMany({ data: rows.map((r, i) => ({ bookingCode: `PG${String(i).padStart(6, '0')}`, courtId: r.court, playerId: r.player,
+      startTime: new Date(Date.UTC(2030, 0, 16, r.h)), endTime: new Date(Date.UTC(2030, 0, 16, r.h + 1)), totalPrice: '20.00' })) });
+    const manager = await signIn(managerEmail);
+    const first = (await manager.get(`/api/v1/operations/venues/${venueId}/bookings?date=2030-01-16`)).body;
+    expect(first).toMatchObject({ page: 1, pageSize: 20, total: 25 });
+    expect(first.items).toHaveLength(20);
+    const starts = first.items.map((b: { startsAt: string }) => b.startsAt);
+    expect([...starts].sort()).toEqual(starts);
+    const second = (await manager.get(`/api/v1/operations/venues/${venueId}/bookings?date=2030-01-16&page=2`)).body;
+    expect(second.items).toHaveLength(5);
+    expect(new Set([...first.items, ...second.items].map((b: { id: string }) => b.id)).size).toBe(25);
+    expect((await manager.get(`/api/v1/operations/venues/${venueId}/bookings?page=0`)).status).toBe(422);
+  });
+
   it('treats % and _ in a search as plain characters, not wildcards', async () => {
     await createBooking();
     const manager = await signIn(managerEmail);

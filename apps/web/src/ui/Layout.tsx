@@ -34,7 +34,8 @@ export function Layout() {
           <span className="av-mark"><Icon name="bolt" size={25}/></span>
           <span className="av-wordmark">Athlete<span>Verse.</span></span>
         </Link>
-        <nav aria-label={STRINGS.nav.main} className="av-nav-scroll flex flex-1 items-center gap-1 md:ml-5">
+        {/* Below 760 px the nav takes its own full-width row (index.css); basis-full is needed because flex-1 sets a 0 basis. */}
+        <nav aria-label={STRINGS.nav.main} className="av-nav-scroll flex flex-1 items-center gap-1 max-[760px]:basis-full md:ml-5">
           {nav.map(item => <NavLink end={item.to !== '/venues'} key={item.to} to={item.to} className="av-navlink min-h-11"><Icon name={item.icon} size={17}/>{item.label}</NavLink>)}
         </nav>
         {user ? <div className="av-userchip">

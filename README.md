@@ -1,7 +1,7 @@
 # AthleteVerse (MVP build)
 
 Sports venue, team and tournament platform. Source of truth: *AthleteVerse SRS v2.0*.
-Status: **T1–T9 baseline expanded with source-level MVP booking/credit, admin/manager/staff onboarding, and operations dashboards.** T4 hosting configuration still requires deployment credentials. New tests for these flows have been added but **have not been executed** in the delivery environment (dependencies and PostgreSQL were unavailable). Read [docs/MVP_COMPLETION_REPORT.md](docs/MVP_COMPLETION_REPORT.md) before relying on the changes. The standalone [Expo health spike](spikes/expo-health/README.md) is untested.
+Status (2026-11-17): **the 49 approved MVP requirements are implemented and pass 652 automated tests on PostgreSQL 15**, with a browser check of the manager, staff and Super Admin screens at desktop and phone widths. **Not yet deployed**: hosting accounts are needed (see [docs/DEPLOY.md](docs/DEPLOY.md)). Start with [docs/FINAL_REPORT.md](docs/FINAL_REPORT.md); requirement-by-requirement evidence is in [docs/PHASE1_REQUIREMENTS_BASELINE.md](docs/PHASE1_REQUIREMENTS_BASELINE.md). The earlier [docs/MVP_COMPLETION_REPORT.md](docs/MVP_COMPLETION_REPORT.md) is kept for history and is out of date. The standalone [Expo health spike](spikes/expo-health/README.md) is untested.
 
 ## Prerequisites
 Node >=22.22.0 (`.nvmrc` selects the Node 22 major line), npm 10+, Docker (for PostgreSQL 15) or any PostgreSQL 15+ with the `btree_gist` extension.

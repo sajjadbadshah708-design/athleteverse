@@ -121,7 +121,7 @@ Enforced on the server per request (role, account status, venue ownership): FR-1
 
 | ID | Kind | Description | Requirement |
 |---|---|---|---|
-| **D1** | Defect — **fixed in Stage 1** | `venueBookings` read the 200 *earliest* bookings of a venue (`orderBy startTime asc, take 200`) and filters by date in memory afterwards. Once a venue has more than 200 bookings, today's and upcoming bookings disappeared from the operations list and search. Fix: the date filter runs in the database on the platform-time-zone day (`localDayRange`); open searches list newest first. Pagination (PERF-4: 20 per page) is still open and needs a small API contract addition. | FR-5.3, FR-2.16, PERF-4 |
+| **D1** | Defect — **fixed in Stage 1** | `venueBookings` read the 200 *earliest* bookings of a venue (`orderBy startTime asc, take 200`) and filters by date in memory afterwards. Once a venue has more than 200 bookings, today's and upcoming bookings disappeared from the operations list and search. Fix: the date filter runs in the database on the platform-time-zone day (`localDayRange`); open searches list newest first. Pagination (PERF-4: 20 per page) added in Stage 3; the response keeps `items` and adds `page`, `pageSize`, `total`. | FR-5.3, FR-2.16, PERF-4 |
 | G1 | Gap — **closed in Stage 2** | Was: no endpoint or screen for a user to see their sessions and sign out the others. | FR-1.24 (Yes†) |
 | G2 | Gap — **closed in Stage 2** | Was: no manager home with today's bookings and open actions (missing outcomes). | FR-5.1 (Yes†) |
 | G3 | Gap — **closed in Stage 2** | Was: no booking detail with status history and credit badge. | FR-5.3 (Yes†) |
@@ -133,17 +133,20 @@ Enforced on the server per request (role, account status, venue ownership): FR-1
 | D5 | Defect — **fixed in Stage 2** | Audit-log rows took their time from the database clock while every other timestamp used the injected clock (README rule), which mis-ordered history and bypassed test time. All audit writes now use the injected clock; the auto-close job now audits each closure. | FR-5.14, FR-5.3 |
 | D6 | Defect — **fixed after the browser check** | With the real clock, a credit event was stamped a few milliseconds before the outcome that caused it, so the booking history listed "Credit change" before "Cash paid". The credit engine now takes the transaction's timestamp; a regression test uses a clock that advances on every call. | FR-5.3 |
 | D7 | Defect — **fixed after the browser check** | Text links (`.av-link`, e.g. "Open front desk") were 42 px tall, under the 44 px touch target. | USA-2 |
-| F1 | Finding — open, not new | At 375 px the top navigation is a horizontal scroller only 51 px wide holding 308 px of links, so a phone user sees about one link at a time. Pre-existing layout; candidate for a phone menu. | USA-2, Table 5 |
+| F1 | Finding — **fixed in Stage 3** | At 375 px the top navigation is a horizontal scroller only 51 px wide holding 308 px of links, so a phone user sees about one link at a time. Was: pre-existing layout (the nav's `flex-1` gave it a 0 basis). Now the nav takes its own row and wraps: all links visible at 320 and 375 px, 44 px targets; 5 player links use 2 rows. | USA-2, Table 5 |
+| D8 | Defect — **fixed in Stage 3** | In production `WEB_BASE_URL` silently defaulted to `http://localhost:5173` and was missing from `render.yaml`, so staff invitation links from the live site would point to localhost. The API now refuses to start in production without an https public address; `render.yaml` asks for it. | FR-1.6 |
+| S1 | Security — **patched in Stage 3** | `body-parser` 2.3.0 (inside Express): denial of service via trailing bytes after a compressed body (GHSA-27r3-jxmh-p828). Updated to 2.4.0. | SEC-4 |
+| S2 | Security — **accepted risk** | `deepmerge-ts` < 8 via `@prisma/config` (GHSA-ggr8-5vv4-36mx). Only the Prisma CLI uses it to merge its own config at build time, never request data. The fix is Prisma 7 (major), outside the approved stack (Prisma 6.19.3). Revisit with a Prisma upgrade. | SEC-4 |
 
 ## 6. Ambiguities and conflicts (to confirm; not acted on)
 
 | ID | Item | Current behaviour | Question |
 |---|---|---|---|
 | A1 | Requested player menu (Teams, Matches, Tournaments, Messages) vs approved scope | **Resolved 2026-11-17**: keep approved scope; no Messages | – |
-| A2 | Leaving Blocked early: `applyCredit` clears `blockedAt` whenever the score rises above 0, so a +5 Paid outcome on an older booking lifts a block before 30 days. SRS §5.5 says Blocked returns after 30 days "or earlier if the Super Admin restores". | Unblocks at 5 points | Should only the 30-day job or an admin end a block? |
+| A2 | Leaving Blocked early | **Resolved 2026-11-17**: a block ends only by the 30-day restore job or the Super Admin (SRS 5.5). Points earned while Blocked count; the restore sets max(score, 20). | – |
 | A3 | Table 15 "Unpaid … flagged to the manager" | No flag; Unpaid only shows as a payment status | Is the status label enough for the MVP (notifications are Later)? |
-| A4 | Manager cancellation of a booking that has already started | Allowed while status is Confirmed | Should it be limited to upcoming bookings, like the player's cancel? FR-2.22 says "any booking". |
-| A5 | OI-1 launch time zone and currency | `PLATFORM_TZ=UTC` | Which IANA zone (e.g. `Asia/Karachi`)? |
+| A4 | Manager cancellation of a started booking | **Resolved 2026-11-17**: kept as is. FR-2.22 says "any booking" and the cancellation carries no penalty. | – |
+| A5 | OI-1 launch time zone | **Resolved 2026-11-17 (assumed)**: `PLATFORM_TZ=Asia/Karachi` in `render.yaml` and `.env.example` (+92 phone numbers, team in Pakistan). Currency stays plain amounts (A1). | Change `render.yaml` if the launch city differs |
 | A6 | Runtime | Local Node v24.18.0; project and Render target Node 22 | Install Node 22 locally for parity? |
 | A7 | FR-2.12 (booking notifications) and FR-2.26 (disputes) are SRS **Must** but scoped Later | Booking e-mail sent; no disputes | Stakeholder acknowledgement of the fairness risk is recorded in `MVP_COMPLETION_REPORT.md` |
 
@@ -151,4 +154,4 @@ Enforced on the server per request (role, account status, venue ownership): FR-1
 - [x] SRS read in full; 128 FRs reconciled with the scope matrix (49 / 76 / 3).
 - [x] Actors, permissions, business rules and MVP traceability recorded above.
 - [x] Scope decision recorded (A1).
-- [ ] A2–A6 answered by the project owner (A2 and A4 change behaviour; the rest are configuration).
+- [x] A2, A4, A5 decided 2026-11-17 (owner delegated: "do what you think is best"). A6 (local Node 22) left to the owner.

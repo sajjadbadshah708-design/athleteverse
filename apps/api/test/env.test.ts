@@ -3,7 +3,7 @@ import { loadEnv } from '../src/config/env';
 
 const base = { DATABASE_URL: 'postgresql://u:p@localhost:5432/db' };
 const SECRET = 'x'.repeat(32);
-const PRODUCTION = { NODE_ENV: 'production', JOB_SECRET: SECRET, JWT_SECRET: SECRET, OTP_PEPPER: SECRET, MAIL_PROVIDER: 'console' };
+const PRODUCTION = { NODE_ENV: 'production', JOB_SECRET: SECRET, JWT_SECRET: SECRET, OTP_PEPPER: SECRET, MAIL_PROVIDER: 'console', WEB_BASE_URL: 'https://athleteverse.example.com' };
 
 describe('loadEnv', () => {
   it('applies defaults', () => {
@@ -64,6 +64,15 @@ describe('loadEnv', () => {
     expect(loadEnv({ ...base, ENABLE_SPIKES: 'true' }).ENABLE_SPIKES).toBe(true);
     expect(loadEnv({ ...base, ENABLE_SPIKES: 'false' }).ENABLE_SPIKES).toBe(false);
     expect(() => loadEnv({ ...base, ENABLE_SPIKES: 'perhaps' })).toThrow(/ENABLE_SPIKES/);
+  });
+
+  it('requires the public https web address in production, so invitation links never point to localhost (FR-1.6)', () => {
+    const { WEB_BASE_URL: _unused, ...withoutUrl } = PRODUCTION;
+    for (const bad of [undefined, 'http://localhost:5173', 'https://localhost:5173', 'https://127.0.0.1', 'http://athleteverse.example.com']) {
+      expect(() => loadEnv({ ...base, ...withoutUrl, ...(bad && { WEB_BASE_URL: bad }) }), String(bad)).toThrow(/WEB_BASE_URL: must be the public https address/);
+    }
+    expect(loadEnv({ ...base, ...PRODUCTION }).WEB_BASE_URL).toBe('https://athleteverse.example.com');
+    expect(loadEnv({ ...base }).WEB_BASE_URL).toBe('http://localhost:5173'); // development keeps its default
   });
 
   it('requires every secret and a mail provider in production (SEC-2, FR-1.8, FR-1.3)', () => {

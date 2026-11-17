@@ -7,7 +7,8 @@ import { cancellationPreview, cancelMyBooking, listMyBookings, managerCancelBook
 
 const bookingParams = z.object({ id: idSchema });
 const venueParams = z.object({ venueId: idSchema });
-const venueQuery = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), search: z.string().max(100).optional() });
+const venueQuery = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), search: z.string().max(100).optional(),
+  page: z.coerce.number().int().min(1).default(1) });
 
 export const OPERATIONS_ROUTES = [
   defineRoute({ method: 'get', path: '/me/bookings', summary: 'My upcoming, past and cancelled bookings',
@@ -28,7 +29,7 @@ export const OPERATIONS_ROUTES = [
   defineRoute({ method: 'get', path: '/operations/venues/:venueId/bookings', summary: 'Venue front-desk bookings and search',
     tags: ['operations'], srs: ['FR-5.3', 'FR-1.13'], access: { roles: ['MANAGER', 'STAFF'] }, params: venueParams,
     query: venueQuery, response: venueBookingsResponseSchema,
-    handler: ({ deps, auth, params, query }) => venueBookings(deps, auth, params.venueId, query.date, query.search) }),
+    handler: ({ deps, auth, params, query }) => venueBookings(deps, auth, params.venueId, query.date, query.search, query.page) }),
   defineRoute({ method: 'get', path: '/manager/home', summary: "Manager home: today's bookings by court and bookings needing action",
     tags: ['operations'], srs: ['FR-5.1', 'FR-1.13'], access: { roles: ['MANAGER'] }, query: managerHomeQuerySchema, response: managerHomeSchema,
     handler: ({ deps, auth, query }) => managerHome(deps, auth.userId, query.venueId) }),

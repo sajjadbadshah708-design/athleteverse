@@ -185,7 +185,7 @@ describe('forged and foreign tokens are refused (SEC-3)', () => {
 
 describe('cookies in production (SEC-1)', () => {
   it('are Secure over HTTPS', async () => {
-    const prod = testDeps({ prisma: db.prisma }, { NODE_ENV: 'production', JWT_SECRET: 'j'.repeat(40), OTP_PEPPER: 'o'.repeat(40), MAIL_PROVIDER: 'console' });
+    const prod = testDeps({ prisma: db.prisma }, { NODE_ENV: 'production', JWT_SECRET: 'j'.repeat(40), OTP_PEPPER: 'o'.repeat(40), MAIL_PROVIDER: 'console', WEB_BASE_URL: 'https://athleteverse.example.com' });
     const user = await createUser(db.prisma);
     const res = await browser(createApp(prod.deps)).post('/api/v1/auth/login').send({ email: user.email, password: PASSWORD });
     expect(cookieNamed(res, 'av_access')).toMatch(/; Secure/i);

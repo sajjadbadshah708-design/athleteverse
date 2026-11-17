@@ -1,7 +1,7 @@
 // MVP booking management and credit contracts, shared by web and the API.
 import { z } from 'zod';
 import { bookingSchema } from './bookings';
-import { idSchema } from './common';
+import { idSchema, pageOf } from './common';
 import { ROLES, TIERS } from '../enums';
 
 export const myBookingsResponseSchema = z.object({ items: z.array(bookingSchema) });
@@ -13,7 +13,7 @@ export const outcomeRequestSchema = z.object({ outcome: z.enum(['PAID', 'UNPAID'
 export const outcomeResultSchema = z.object({ ok: z.literal(true), creditScore: z.number().int(), creditTier: z.enum(TIERS) });
 export const venueBookingSchema = bookingSchema.extend({ player: z.object({ id: idSchema, fullName: z.string(), phone: z.string(), creditScore: z.number().int(), creditTier: z.enum(TIERS) }) });
 export type VenueBooking = z.infer<typeof venueBookingSchema>;
-export const venueBookingsResponseSchema = z.object({ items: z.array(venueBookingSchema) });
+export const venueBookingsResponseSchema = pageOf(venueBookingSchema); // PERF-4: 20 per page
 export type VenueBookingsResponse = z.infer<typeof venueBookingsResponseSchema>;
 export const creditSummarySchema = z.object({
   score: z.number().int().min(0).max(100), tier: z.enum(TIERS),

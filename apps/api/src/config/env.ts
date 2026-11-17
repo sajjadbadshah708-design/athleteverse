@@ -43,6 +43,11 @@ const schema = z
     requireInProduction('JWT_SECRET');
     requireInProduction('OTP_PEPPER');
     requireInProduction('MAIL_PROVIDER');
+    // Invitation e-mails link to WEB_BASE_URL (FR-1.6). The development default would send every invited staff member to
+    // localhost, so production needs the real public https address of the web app.
+    if (env.NODE_ENV === 'production' && (!env.WEB_BASE_URL.startsWith('https://') || /^https:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(env.WEB_BASE_URL))) {
+      ctx.addIssue({ code: 'custom', path: ['WEB_BASE_URL'], message: 'must be the public https address of the web app in production' });
+    }
     if (env.MAIL_PROVIDER === 'brevo' || env.MAIL_PROVIDER === 'resend') {
       if (!env.MAIL_API_KEY) ctx.addIssue({ code: 'custom', path: ['MAIL_API_KEY'], message: `is required for MAIL_PROVIDER=${env.MAIL_PROVIDER}` });
       if (!env.MAIL_FROM) ctx.addIssue({ code: 'custom', path: ['MAIL_FROM'], message: `is required for MAIL_PROVIDER=${env.MAIL_PROVIDER}` });

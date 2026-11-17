@@ -39,8 +39,10 @@ services:
         sync: false
       - key: MAIL_FROM           # "AthleteVerse <your validated sender>"; ignored for console
         sync: false
+      - key: WEB_BASE_URL        # public https address of the Vercel web app (staff invitation links); the API refuses to start without it
+        sync: false
       - key: PLATFORM_TZ
-        value: UTC               # set the IANA zone of the launch city once OI-1 is answered
+        value: Asia/Karachi      # OI-1: launch in Pakistan (assumed 2026-11-17; +92 phone numbers). Change here if the launch city differs
       - key: TRUST_PROXY_HOPS
         value: "0"               # set after spike S2 measures the Vercel -> Render chain
       - key: ENABLE_SPIKES

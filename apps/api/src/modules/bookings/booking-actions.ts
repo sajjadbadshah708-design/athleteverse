@@ -5,7 +5,7 @@ import { AppError, forbidden, notFound } from '../../lib/errors';
 import { withTx, lockBooking, lockCourt, lockUser } from '../../db/tx';
 import { applyCredit } from '../credit/credit.service';
 import { BOOKING_INCLUDE, bookingView } from './booking-view';
-import { tierOf, type BookingHistoryEvent, type Role } from '@athleteverse/shared';
+import { PAGE_SIZE, tierOf, type BookingHistoryEvent, type Role } from '@athleteverse/shared';
 import type { Prisma } from '@prisma/client';
 import { escapeLike } from '../../lib/search';
 import { localDateIn, localDayRange } from '../../lib/time';
@@ -83,23 +83,24 @@ export async function findVenueForOperator(deps: AppDeps, actor: { userId: strin
 /**
  * FR-5.3: the venue's bookings, optionally for one local date and a search by code, player name or phone.
  * The date is filtered in the database (never after the row limit), so a long history cannot hide today's bookings.
- * A single day lists in time order; an open search lists newest first.
+ * A single day lists in time order; an open search lists newest first. 20 per page (PERF-4).
  */
-export async function venueBookings(deps: AppDeps, actor: { userId: string; role: Role; staffVenueId: string | null }, venueId: string, date?: string, search?: string) {
+export async function venueBookings(deps: AppDeps, actor: { userId: string; role: Role; staffVenueId: string | null }, venueId: string, date?: string, search?: string, page = 1) {
   await findVenueForOperator(deps, actor, venueId);
   const [good, caution] = await Promise.all([deps.settings.get('tier_good'), deps.settings.get('tier_caution')]);
   const day = date ? localDayRange(date, deps.env.PLATFORM_TZ) : undefined;
   const term = search?.trim() ? escapeLike(search.trim()) : undefined;
-  const rows = await deps.prisma.booking.findMany({
-    where: { court: { venueId }, ...(day && { startTime: { gte: day.start, lt: day.end } }), ...(term ? { OR: [
-      { bookingCode: { contains: term.toUpperCase() } },
-      { player: { fullName: { contains: term, mode: 'insensitive' as const } } },
-      { player: { phone: { contains: term } } },
-    ] } : {}) },
-    include: OPERATOR_INCLUDE,
-    orderBy: { startTime: day ? 'asc' : 'desc' }, take: 200,
-  });
-  return { items: rows.map(b => operatorView(b, deps.env.PLATFORM_TZ, { good, caution })) };
+  const where: Prisma.BookingWhereInput = { court: { venueId }, ...(day && { startTime: { gte: day.start, lt: day.end } }), ...(term ? { OR: [
+    { bookingCode: { contains: term.toUpperCase() } },
+    { player: { fullName: { contains: term, mode: 'insensitive' as const } } },
+    { player: { phone: { contains: term } } },
+  ] } : {}) };
+  const [total, rows] = await Promise.all([
+    deps.prisma.booking.count({ where }),
+    deps.prisma.booking.findMany({ where, include: OPERATOR_INCLUDE,
+      orderBy: [{ startTime: day ? 'asc' : 'desc' }, { id: 'asc' }], skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
+  ]);
+  return { items: rows.map(b => operatorView(b, deps.env.PLATFORM_TZ, { good, caution })), page, pageSize: PAGE_SIZE, total };
 }
 
 const HISTORY_ACTIONS = ['BOOKING_CANCELLED', 'VENUE_BOOKING_CANCELLED', 'BOOKING_OUTCOME', 'BOOKING_AUTO_CLOSED'] as const;

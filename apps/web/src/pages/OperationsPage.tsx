@@ -53,8 +53,8 @@ function BookingDesk({ venueId, isManager }: { venueId: string; isManager: boole
   const [search, setSearch] = useState(''); const [date, setDate] = useState('');
   const [busy, setBusy] = useState<string | null>(null); const [message, setMessage] = useState<string | null>(null);
   const [openDetail, setOpenDetail] = useState<string | null>(null); const [paying, setPaying] = useState<string | null>(null);
-  const [version, setVersion] = useState(0);
-  const url = `/operations/venues/${venueId}/bookings?${new URLSearchParams({ ...(search && { search }), ...(date && { date }) }).toString()}`;
+  const [version, setVersion] = useState(0); const [page, setPage] = useState(1);
+  const url = `/operations/venues/${venueId}/bookings?${new URLSearchParams({ ...(search && { search }), ...(date && { date }), ...(page > 1 && { page: String(page) }) }).toString()}`;
   const { loaded, refresh } = useApiData<VenueBookingsResponse>(url);
   async function cancelByVenue(id: string) {
     const reason = window.prompt('Reason for cancelling this booking (at least three characters):');
@@ -76,18 +76,20 @@ function BookingDesk({ venueId, isManager }: { venueId: string; isManager: boole
     finally { setBusy(null); }
   }
   const items = loaded.status === 'ready' ? loaded.data.items : [];
+  const total = loaded.status === 'ready' ? loaded.data.total : 0;
+  const pages = loaded.status === 'ready' ? Math.max(1, Math.ceil(total / loaded.data.pageSize)) : 1;
   return <div className="space-y-6">
     <section className="av-panel"><div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><span className="av-eyebrow">Booking lookup</span><h2 className="av-panel-title mt-2">Find a reservation</h2></div><span className="av-mini-pill"><Icon name="search" size={14}/> Live venue records</span></div>
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_230px]">
-        <label className="space-y-2 text-sm font-bold text-[#345269]">Search by code, name or phone<input className="av-field" value={search} onChange={e => setSearch(e.target.value)} placeholder="Code, customer name or phone…" /></label>
-        <label className="space-y-2 text-sm font-bold text-[#345269]">Booking date (optional)<input className="av-field" type="date" value={date} onChange={e => setDate(e.target.value)} /></label>
+        <label className="space-y-2 text-sm font-bold text-[#345269]">Search by code, name or phone<input className="av-field" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Code, customer name or phone…" /></label>
+        <label className="space-y-2 text-sm font-bold text-[#345269]">Booking date (optional)<input className="av-field" type="date" value={date} onChange={e => { setDate(e.target.value); setPage(1); }} /></label>
       </div>
     </section>
     {message && <Alert tone="info">{message}</Alert>}
     {loaded.status === 'loading' && <p role="status" className="av-panel">Loading venue bookings…</p>}
     {loaded.status === 'error' && <Alert tone="error">{describeError(loaded.error)}</Alert>}
-    {loaded.status === 'ready' && <><div className="grid gap-4 sm:grid-cols-3"><div className="av-metric"><p className="av-metric-label">Matching bookings</p><p className="av-metric-number">{items.length}</p></div><div className="av-metric"><p className="av-metric-label">Confirmed</p><p className="av-metric-number">{items.filter(b => b.status === 'CONFIRMED').length}</p></div><div className="av-metric"><p className="av-metric-label">Cash paid</p><p className="av-metric-number">{items.filter(b => b.paymentStatus === 'PAID').length}</p></div></div>
-      <div className="av-section-header"><div><span className="av-eyebrow">Front desk queue</span><h2 className="av-section-title mt-2">Booking records</h2></div><span className="av-mini-pill">{items.length} shown</span></div>
+    {loaded.status === 'ready' && <><div className="grid gap-4 sm:grid-cols-3"><div className="av-metric"><p className="av-metric-label">Matching bookings</p><p className="av-metric-number">{total}</p></div><div className="av-metric"><p className="av-metric-label">Confirmed on this page</p><p className="av-metric-number">{items.filter(b => b.status === 'CONFIRMED').length}</p></div><div className="av-metric"><p className="av-metric-label">Cash paid on this page</p><p className="av-metric-number">{items.filter(b => b.paymentStatus === 'PAID').length}</p></div></div>
+      <div className="av-section-header"><div><span className="av-eyebrow">Front desk queue</span><h2 className="av-section-title mt-2">Booking records</h2></div><span className="av-mini-pill">{items.length} shown of {total}</span></div>
       {items.length === 0 && <div className="av-empty"><div className="av-empty-icon"><Icon name="ticket" size={27}/></div><h3 className="font-extrabold text-ink">Nothing in this view</h3><p className="mt-2 text-sm">No matching bookings.</p></div>}
       <div className="grid gap-4 xl:grid-cols-2">{items.map(b => <article className="av-booking-card space-y-4" key={b.id}>
         <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="av-eyebrow">BOOKING {b.code}</p><h2 className="mt-2 text-xl font-extrabold">{b.player.fullName}</h2><p className="mt-1 flex items-center gap-2 text-sm text-ink-muted"><Icon name="grid" size={16}/>{b.court.name}, {b.date} {String(b.startHour).padStart(2, '0')}:00–{String(b.endHour).padStart(2, '0')}:00</p></div><span className="av-status-pill">{b.status}</span></div>
@@ -102,6 +104,11 @@ function BookingDesk({ venueId, isManager }: { venueId: string; isManager: boole
         <Button variant="secondary" aria-expanded={openDetail === b.id} onClick={() => setOpenDetail(openDetail === b.id ? null : b.id)}>{openDetail === b.id ? t.hideDetails : t.details}</Button>
         {openDetail === b.id && <BookingDetailPanel key={version} id={b.id} code={b.code} />}
       </article>)}</div>
+      {pages > 1 && <nav className="flex flex-wrap items-center gap-3" aria-label="Booking pages">
+        <Button variant="secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>{STRINGS.venues.previous}</Button>
+        <span className="text-sm">{STRINGS.venues.pageOf(page, pages)}</span>
+        <Button variant="secondary" disabled={page >= pages} onClick={() => setPage(page + 1)}>{STRINGS.venues.next}</Button>
+      </nav>}
     </>}
   </div>;
 }

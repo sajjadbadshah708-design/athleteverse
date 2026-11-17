@@ -16,7 +16,9 @@ function staffServer(role: 'STAFF' | 'MANAGER' = 'STAFF') {
   const s = createFakeServer();
   s.signedIn(sampleUser({ role, staffVenueId: role === 'STAFF' ? VENUE_ID : null }));
   if (role === 'MANAGER') s.on('GET /manager/venues', () => json({ items: [{ id: VENUE_ID, name: 'Arena One', cityId: 1, address: '1 Main St', openHour: 8, closeHour: 23, status: 'ACTIVE' }] }));
-  s.on(`GET /operations/venues/${VENUE_ID}/bookings`, () => json({ items: [CONFIRMED, AUTO_CLOSED] }));
+  s.on(`GET /operations/venues/${VENUE_ID}/bookings`, (call) => json(new URLSearchParams(call.search).get('page') === '2'
+    ? { items: [{ ...AUTO_CLOSED, id: '99999999-0000-4000-8000-000000000021', code: 'DESKBK21' }], page: 2, pageSize: 20, total: 21 }
+    : { items: [CONFIRMED, AUTO_CLOSED], page: 1, pageSize: 20, total: 21 }));
   s.on(`POST /operations/bookings/${CONFIRMED.id}/outcome`, () => json({ ok: true, creditScore: 70, creditTier: 'GOOD' }));
   s.on(`GET /operations/bookings/${CONFIRMED.id}`, () => json({ ...CONFIRMED, amountReceived: null, cancelReason: null, history: [
     { at: '2030-01-15T09:00:00.000Z', event: 'CREATED', by: { name: 'Sara Malik', role: 'PLAYER' }, reason: null, points: null, amount: null },
@@ -71,6 +73,20 @@ describe('venue front desk', () => {
     await screen.findByText('BOOKING DESKBK02');
     expect(within(card('DESKBK02')).getByRole('button', { name: 'Confirm cash paid' })).toBeInTheDocument();
     expect(within(card('DESKBK02')).queryByRole('button', { name: 'Record no-show' })).not.toBeInTheDocument();
+  });
+
+  it('shows the true total and pages through the bookings (PERF-4)', async () => {
+    const user = userEvent.setup();
+    const s = staffServer();
+    renderApp(s, { route: '/operations' });
+    await screen.findByText('BOOKING DESKBK01');
+    expect(screen.getByText('Matching bookings').nextElementSibling).toHaveTextContent('21');
+    expect(screen.getByText('2 shown of 21')).toBeInTheDocument();
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(await screen.findByText('BOOKING DESKBK21')).toBeInTheDocument();
+    expect(screen.getByText('Page 2 of 2')).toBeInTheDocument();
+    expect(s.calls.some((c) => c.path.endsWith('/bookings') && c.search === '?page=2')).toBe(true);
   });
 
   it('opens the status history with who did what, amounts and points', async () => {

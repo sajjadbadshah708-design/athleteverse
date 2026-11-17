@@ -142,8 +142,10 @@
 }
 @media (max-width: 760px) {
   .av-header-inner { flex-wrap: wrap; row-gap: 3px; padding: 11px 17px 8px; }
-  .av-nav-scroll { width: 100%; order: 5; display: flex; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
-  .av-nav-scroll::-webkit-scrollbar { height: 3px; }
+  /* Phones: the nav takes its own row and wraps, so every destination is visible without sideways scrolling (USA-2).
+     The icons inside the nav are decorative (each link has a text label), so they are dropped to keep it compact. */
+  .av-nav-scroll { width: 100%; order: 5; display: flex; flex-wrap: wrap; padding-bottom: 2px; }
+  .av-nav-scroll .av-navlink svg { display: none; }
   .av-navlink { padding: 7px 12px; }
   .av-page { padding: 24px 16px 64px; }
   .av-auth-wrap { grid-template-columns: 1fr; min-height: unset; }

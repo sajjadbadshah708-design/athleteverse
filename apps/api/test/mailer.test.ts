@@ -27,7 +27,7 @@ describe('console mailer (development, tests, explicit demos)', () => {
 
   it('warns loudly when chosen in production', () => {
     const { deps, logs } = testDeps();
-    const env = loadEnv({ ...base, NODE_ENV: 'production', JOB_SECRET: 'j'.repeat(32), JWT_SECRET: 'j'.repeat(32), OTP_PEPPER: 'o'.repeat(32), MAIL_PROVIDER: 'console' });
+    const env = loadEnv({ ...base, NODE_ENV: 'production', JOB_SECRET: 'j'.repeat(32), JWT_SECRET: 'j'.repeat(32), OTP_PEPPER: 'o'.repeat(32), MAIL_PROVIDER: 'console', WEB_BASE_URL: 'https://athleteverse.example.com' });
     createMailer(env, deps.logger);
     expect(logs.some((l) => l.level === 'warn' && String(l.msg).includes('MAIL_PROVIDER=console in production'))).toBe(true);
   });

@@ -41,6 +41,8 @@ Everything in this repository is built and tested. The steps below need **your a
 1. Edit `region` in `render.yaml` if needed, commit and push.
 2. Render dashboard -> **New** -> **Blueprint** -> select the repository. When asked, paste `DATABASE_URL` (pooled) and `DIRECT_URL` (direct).
    Also enter `MAIL_PROVIDER` (`brevo`, `resend` or `console`), `MAIL_API_KEY` and `MAIL_FROM`. With `console` the verification codes appear in the Render **Logs** instead of an inbox: acceptable for a supervised demo, not for real users. The other two values are ignored then, but Render asks for them: enter any text.
+   Enter `WEB_BASE_URL` = the public address of the Vercel site, for example `https://athleteverse.vercel.app` (no trailing slash). Staff invitation e-mails link there; the API refuses to start in production without an `https` address. If you create the Render service before the Vercel site exists, deploy Vercel first (section 4) or enter the expected `https://<project>.vercel.app` address now.
+   `PLATFORM_TZ` is preset to `Asia/Karachi` in `render.yaml` (OI-1, assumed); change it there if the launch city differs.
 3. After the first deploy, open **Environment** and copy the generated `JOB_SECRET` (you need it in step 5). `JWT_SECRET` and `OTP_PEPPER` are generated too; do not copy them anywhere.
 4. Check: `curl https://<service>.onrender.com/api/v1/health` returns `"status":"ok"`.
 
