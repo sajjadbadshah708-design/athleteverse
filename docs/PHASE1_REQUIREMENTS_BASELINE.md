@@ -5,7 +5,7 @@
 | Source of truth | *AthleteVerse SRS Version 2.0* (41 pages; the cover still says "Version 1.0", the page headers and "Replaces Version 1.0" confirm 2.0) |
 | Approved scope | `docs/MVP_SCOPE_MATRIX.csv`: 128 FRs = **26 Yes + 23 Yes† = 49 MVP**, 76 Later, 3 No (FR-1.25, FR-2.14, FR-4.20) |
 | Scope decision | 2026-11-17, project owner: **keep the approved scope**. Teams, Matches and Tournaments (F3, F4) stay Later. "Messages" is out of scope (SRS §1.2: no in-app chat in v2.0). |
-| Evidence date | 2026-11-17, local run on PostgreSQL 15 (Docker), Node v24.18.0 |
+| Evidence date | 2026-11-17, local run on PostgreSQL 15 (Docker), Node v24.18.0. Stage 1: API 386, web 191, shared 36 tests pass |
 
 Status words used below: **Verified** = behaviour exercised by a passing automated test; **Implemented, untested** = code exists, no test exercises it; **Partial** = only part of the approved (Yes†) slice exists; **Gap** = approved but missing.
 
@@ -51,9 +51,9 @@ Enforced on the server per request (role, account status, venue ownership): FR-1
 | 1.14 | Yes† | Basic profile (city, area, DOB); sports with Teams | `profile.service.ts` | Verified (`profile.test`) |
 | 1.15 | Yes† | Booking blocked until profile complete | `completeness.ts` | Verified (`bookings.test`, `completeness.test`) |
 | 1.16 | Yes† | Phone only to booking venue; never e-mail/DOB | `route.ts` response filter | Verified (`privacy.test`, `route.test`) |
-| 1.18 | Yes | Limits 3 venues / 10 courts / 5 staff | `management.service.ts` | **Implemented, untested** |
+| 1.18 | Yes | Limits 3 venues / 10 courts / 5 staff | `management.service.ts` | Verified (`mvp-operations.test`, Stage 1) |
 | 1.20 | Yes† | Admin approve/reject only | `management.service.ts`, `AdminPage` | Verified (`mvp-operations.test`) |
-| 1.23 | Yes† | Reason + audit for approvals, rejections, cancellations | `auditLog.create` calls | Verified for approval (`mvp-operations.test`); cancellation reason untested |
+| 1.23 | Yes† | Reason + audit for approvals, rejections, cancellations | `auditLog.create` calls | Verified (`mvp-operations.test`: approval, manager cancellation) |
 | 1.24 | Yes† | Sessions recorded, 5-cap, **revoke**; device UI Later | `sessions.ts` | **Partial**: cap and per-client records verified (`auth.login.test`); no endpoint for a user to sign out their other sessions (**G1**) |
 ### F2 Venue discovery and court booking (22)
 | FR | Scope | Approved slice | Status / evidence |
@@ -67,25 +67,25 @@ Enforced on the server per request (role, account status, venue ownership): FR-1
 | 2.9 | Yes | Three-layer double-booking guard | Verified (`bookings.test`: 10 concurrent players → 1 booking; exclusion constraint) |
 | 2.10 | Yes | Price snapshot | Verified (`bookings.test`) |
 | 2.11 | Yes | Tier limits 3/2/1/0; no player overlap | Verified (`bookings.test`) |
-| 2.13 | Yes | My Bookings Upcoming / Past / Cancelled | **Implemented, untested** (API list and web page have no test) |
+| 2.13 | Yes | My Bookings Upcoming / Past / Cancelled | Verified (`mvp-operations.test`, web `myBookings.test`) |
 | 2.15 | Yes | No online payment; "pay cash" copy | Verified (`bookings.test`: confirmation mail) |
-| 2.16 | Yes | Record Paid / Unpaid / No-Show | Paid and No-Show verified; **Unpaid (−50) untested** |
+| 2.16 | Yes | Record Paid / Unpaid / No-Show | Verified (`mvp-operations.test`: all three, staff and manager, cross-venue refusal) |
 | 2.17 | Yes | Paid → Completed, +5 (cap 100), receipt | Verified (`mvp-operations.test`) |
-| 2.18 | Yes | Auto-close after 24 h, no penalty | **Implemented, untested** (`timed-jobs.ts`) |
+| 2.18 | Yes | Auto-close after 24 h, no penalty | Verified (`mvp-operations.test`: boundary, idempotent, 7-day manager confirmation) |
 | 2.20 | Yes | Cancellation preview shows rule and points | Verified (`mvp-operations.test`) |
-| 2.21 | Yes | Windows 0 / −10 / −20 on server time | Free and Late verified; **Last-minute (−20) untested** |
-| 2.22 | Yes† | Manager cancels with reason, no penalty | **Implemented, untested** |
+| 2.21 | Yes | Windows 0 / −10 / −20 on server time | Verified (`mvp-operations.test`: all boundaries, score floor, no cancel after start) |
+| 2.22 | Yes† | Manager cancels with reason, no penalty | Verified (`mvp-operations.test`) |
 | 2.23 | Yes | No-Show only ≥15 min after start | Verified (`mvp-operations.test`) |
 | 2.24 | Yes | Credit once, same transaction, 0–100, ledger | Verified (`mvp-operations.test`, `constraints.test`) |
 | 2.25 | Yes† | Tier booking limits and block (tournament ban Later) | Verified (`bookings.test`) |
 | 2.27 | Yes | Score, tier, history; tier badge for venue | API implemented; **player credit page and badge untested** |
-| 2.28 | Yes† | Auto-restore blocked → 20 after 30 days | **Implemented, untested** (`timed-jobs.ts`) |
+| 2.28 | Yes† | Auto-restore blocked → 20 after 30 days | Verified (`mvp-operations.test`: boundary, once only) |
 
 ### F5 Management dashboards (8)
 | FR | Scope | Approved slice | Status / evidence |
 |---|---|---|---|
 | 5.1 | Yes† | Manager home: today's bookings and open actions | **Gap G2**: no home view; only the operations list |
-| 5.3 | Yes† | List, search by code/name/phone, detail with status history from audit log | **Partial**: list and search exist; no detail view (**G3**); defect **D1** |
+| 5.3 | Yes† | List, search by code/name/phone, detail with status history from audit log | **Partial**: list and search verified, D1 fixed; no detail view (**G3**) |
 | 5.6 | Yes† | Invite and disable staff (remove, log Later) | Invite verified; disable verified (`auth.session.test`) |
 | 5.8 | Yes† | Venue / court / price forms (preview Later) | Implemented (`ManagerPage`); court form untested |
 | 5.10 | Yes† | Accounts list and approvals | **Partial**: only the pending-manager list (**G4**) |
@@ -101,19 +101,19 @@ Enforced on the server per request (role, account status, venue ownership): FR-1
 | Lockout: 5 failures → 15 min | FR-1.7 | ✔ | ✔ |
 | Slot 60 min, whole hours, 1–3 consecutive on one court | Table 14 | ✔ (code constant + `max_slots` 3) | ✔ |
 | Book ≤14 days ahead, ≥30 min before start | Table 14 | ✔ | ✔ |
-| Cancel >6 h: 0; 1–6 h (inclusive): −10; <1 h: −20; none after start | Table 16 | ✔ `cancellationBand` | 0 and −10 ✔; −20 ✘ |
+| Cancel >6 h: 0; 1–6 h (inclusive): −10; <1 h: −20; none after start | Table 16 | ✔ `cancellationBand` | ✔ |
 | No-Show only from start + 15 min: −30 | Table 15/16 | ✔ | ✔ |
-| Unpaid: Completed / Unpaid, −50 | Table 15/16 | ✔ | ✘ |
+| Unpaid: Completed / Unpaid, −50 | Table 15/16 | ✔ | ✔ |
 | Paid: Completed / Paid, +5, max 100 | Table 15/16 | ✔ | ✔ |
-| Auto-close 24 h after end: Completed / Pending, no penalty | Table 8, FR-2.18 | ✔ | ✘ |
-| Manager may still confirm cash on an auto-closed booking for 7 days | Table 15 | ✔ (manager only; 7 days hard-coded) | ✘ |
+| Auto-close 24 h after end: Completed / Pending, no penalty | Table 8, FR-2.18 | ✔ | ✔ |
+| Manager may still confirm cash on an auto-closed booking for 7 days | Table 15 | ✔ (manager only; 7 days hard-coded) | ✔ |
 | Score 0–100; each event once per booking | §5.5, FR-2.24 | ✔ + DB unique | ✔ |
 | Tiers: Good ≥70, Caution ≥40, Restricted 1–39, Blocked 0 | Figure 7, Table 26 | ✔ `tierOf` | ✔ |
 | Upcoming bookings by tier 3/2/1/0 | Table 14 | ✔ | ✔ |
-| Blocked 30 days → 20 points | §5.5, FR-2.28 | ✔ | ✘ |
-| Manager cancellation: no penalty, reason required | FR-2.22 | ✔ | ✘ |
+| Blocked 30 days → 20 points | §5.5, FR-2.28 | ✔ | ✔ |
+| Manager cancellation: no penalty, reason required | FR-2.22 | ✔ | ✔ |
 | Cash is recorded, never processed | Principle 2 | ✔ (no payment code) | n/a |
-| Limits 3 venues / 10 courts / 5 staff | Table 11 | ✔ | ✘ |
+| Limits 3 venues / 10 courts / 5 staff | Table 11 | ✔ | ✔ |
 | 5 active sessions per user | Table 26 | ✔ | ✔ |
 | Super Admin: OTP each login, 15 min inactivity | SA-3 | ✔ | OTP ✔; inactivity: to confirm |
 
@@ -121,12 +121,12 @@ Enforced on the server per request (role, account status, venue ownership): FR-1
 
 | ID | Kind | Description | Requirement |
 |---|---|---|---|
-| **D1** | Defect | `venueBookings` reads the 200 *earliest* bookings of a venue (`orderBy startTime asc, take 200`) and filters by date in memory afterwards. Once a venue has more than 200 bookings, today's and upcoming bookings disappear from the operations list and search. Also not paginated (PERF-4: 20 per page). | FR-5.3, FR-2.16, PERF-4 |
+| **D1** | Defect — **fixed in Stage 1** | `venueBookings` read the 200 *earliest* bookings of a venue (`orderBy startTime asc, take 200`) and filters by date in memory afterwards. Once a venue has more than 200 bookings, today's and upcoming bookings disappeared from the operations list and search. Fix: the date filter runs in the database on the platform-time-zone day (`localDayRange`); open searches list newest first. Pagination (PERF-4: 20 per page) is still open and needs a small API contract addition. | FR-5.3, FR-2.16, PERF-4 |
 | G1 | Gap | No endpoint or screen for a user to see their sessions and sign out the others. | FR-1.24 (Yes†) |
 | G2 | Gap | No manager home with today's bookings and open actions (missing outcomes). | FR-5.1 (Yes†) |
 | G3 | Gap | No booking detail with status history and credit badge. | FR-5.3 (Yes†) |
 | G4 | Gap | Admin sees only pending managers; no account list with role/status filter. | FR-5.10 (Yes†) |
-| T1 | Test gap | No tests for: auto-close job, blocked-restore job, −20 last-minute, −50 Unpaid, manager cancel, venue/court/staff limits, My Bookings tabs. | FR-2.13, 2.16, 2.18, 2.21, 2.22, 2.28, 1.18 |
+| T1 | Test gap — **closed in Stage 1** | Previously no tests for: auto-close job, blocked-restore job, −20 last-minute, −50 Unpaid, manager cancel, venue/court/staff limits, My Bookings tabs. | FR-2.13, 2.16, 2.18, 2.21, 2.22, 2.28, 1.18 |
 
 ## 6. Ambiguities and conflicts (to confirm; not acted on)
 

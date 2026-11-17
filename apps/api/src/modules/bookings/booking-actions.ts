@@ -6,7 +6,7 @@ import { withTx, lockBooking, lockCourt, lockUser } from '../../db/tx';
 import { applyCredit } from '../credit/credit.service';
 import { BOOKING_INCLUDE, bookingView } from './booking-view';
 import { tierOf, type Role } from '@athleteverse/shared';
-import { localDateIn } from '../../lib/time';
+import { localDayRange } from '../../lib/time';
 
 export type Outcome = 'PAID' | 'UNPAID' | 'NO_SHOW';
 
@@ -66,19 +66,25 @@ export async function findVenueForOperator(deps: AppDeps, actor: { userId: strin
   throw forbidden('This booking does not belong to your assigned venue');
 }
 
+/**
+ * FR-5.3: the venue's bookings, optionally for one local date and a search by code, player name or phone.
+ * The date is filtered in the database (never after the row limit), so a long history cannot hide today's bookings.
+ * A single day lists in time order; an open search lists newest first.
+ */
 export async function venueBookings(deps: AppDeps, actor: { userId: string; role: Role; staffVenueId: string | null }, venueId: string, date?: string, search?: string) {
   await findVenueForOperator(deps, actor, venueId);
   const [good, caution] = await Promise.all([deps.settings.get('tier_good'), deps.settings.get('tier_caution')]);
+  const day = date ? localDayRange(date, deps.env.PLATFORM_TZ) : undefined;
   const rows = await deps.prisma.booking.findMany({
-    where: { court: { venueId }, ...(search ? { OR: [
+    where: { court: { venueId }, ...(day && { startTime: { gte: day.start, lt: day.end } }), ...(search ? { OR: [
       { bookingCode: { contains: search.toUpperCase() } },
       { player: { fullName: { contains: search, mode: 'insensitive' as const } } },
       { player: { phone: { contains: search } } },
     ] } : {}) },
     include: { ...BOOKING_INCLUDE, player: { select: { id: true, fullName: true, phone: true, creditScore: true, blockedAt: true } } },
-    orderBy: { startTime: 'asc' }, take: 200,
+    orderBy: { startTime: day ? 'asc' : 'desc' }, take: 200,
   });
-  return { items: rows.filter(b => !date || localDateIn(deps.env.PLATFORM_TZ, b.startTime) === date)
+  return { items: rows
     .map(b => ({ ...bookingView(b, deps.env.PLATFORM_TZ), player: { id: b.player.id, fullName: b.player.fullName, phone: b.player.phone, creditScore: b.player.creditScore, creditTier: b.player.blockedAt ? 'BLOCKED' as const : tierOf(b.player.creditScore, { good, caution }) } })) };
 }
 

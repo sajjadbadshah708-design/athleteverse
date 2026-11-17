@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, localDateIn, localHourToUtc } from '../src/lib/time';
+import { addDays, localDateIn, localDayRange, localHourToUtc } from '../src/lib/time';
 
 describe('localDateIn', () => {
   const instant = new Date('2030-01-15T12:00:00Z');
@@ -45,6 +45,30 @@ describe('localHourToUtc', () => {
   it('takes the first occurrence of an hour that happens twice (clocks go back on 3 November 2030)', () => {
     expect(iso(localHourToUtc('2030-11-03', 1, 'America/New_York'))).toBe('2030-11-03T05:00:00.000Z'); // 01:00 EDT, not 01:00 EST
     expect(iso(localHourToUtc('2030-11-03', 2, 'America/New_York'))).toBe('2030-11-03T07:00:00.000Z'); // 02:00 EST
+  });
+});
+
+describe('localDayRange', () => {
+  const range = (date: string, tz: string) => {
+    const r = localDayRange(date, tz);
+    return [r.start.toISOString(), r.end.toISOString()];
+  };
+
+  it('covers exactly one calendar day in the zone', () => {
+    expect(range('2030-01-16', 'UTC')).toEqual(['2030-01-16T00:00:00.000Z', '2030-01-17T00:00:00.000Z']);
+    expect(range('2030-01-16', 'Asia/Karachi')).toEqual(['2030-01-15T19:00:00.000Z', '2030-01-16T19:00:00.000Z']); // UTC+5
+  });
+
+  it('is 23 hours long on the day clocks go forward and 25 on the day they go back', () => {
+    const hours = (date: string) => { const r = localDayRange(date, 'America/New_York'); return (r.end.getTime() - r.start.getTime()) / 3600000; };
+    expect(hours('2030-03-10')).toBe(23);
+    expect(hours('2030-11-03')).toBe(25);
+  });
+
+  it('starts at the first real hour when midnight itself is skipped (Havana springs forward at 00:00)', () => {
+    const r = localDayRange('2030-03-10', 'America/Havana');
+    expect(localDateIn('America/Havana', r.start)).toBe('2030-03-10');
+    expect(localDateIn('America/Havana', new Date(r.start.getTime() - 1))).toBe('2030-03-09');
   });
 });
 

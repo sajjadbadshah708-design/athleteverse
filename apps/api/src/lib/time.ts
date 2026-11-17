@@ -1,4 +1,5 @@
 // Time helpers. All instants are UTC (rule 5); "what day is it" is a question about the platform's time zone (PLATFORM_TZ, N4).
+import { addDays } from '@athleteverse/shared';
 
 /** The calendar date (YYYY-MM-DD) that an instant falls on in the given IANA time zone. */
 export function localDateIn(timeZone: string, instant: Date): string {
@@ -39,6 +40,20 @@ export function localHourToUtc(date: string, hour: number, timeZone: string): Da
   return valid.length ? new Date(valid[0]!) : null;
 }
 
-export { addDays } from '@athleteverse/shared'; // one implementation for the API and the clients
+/** The first instant of a local calendar day; when midnight is skipped by a clock change the day starts at the next real hour. */
+function startOfLocalDay(date: string, timeZone: string): Date {
+  for (let hour = 0; hour < 4; hour++) {
+    const instant = localHourToUtc(date, hour, timeZone);
+    if (instant) return instant;
+  }
+  throw new Error(`No valid start of day for ${date} in ${timeZone}`);
+}
+
+/** The UTC range [start, end) covered by a calendar date (YYYY-MM-DD) in the given time zone, for database filters. */
+export function localDayRange(date: string, timeZone: string): { start: Date; end: Date } {
+  return { start: startOfLocalDay(date, timeZone), end: startOfLocalDay(addDays(date, 1), timeZone) };
+}
+
+export { addDays }; // one implementation for the API and the clients
 
 export const HOUR = HOUR_MS;
